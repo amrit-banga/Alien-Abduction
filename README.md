@@ -36,11 +36,11 @@ Environments cycle randomly after the initial sequence (ocean → grassland → 
 | **Werewolf** 🟡 | City (on rooftops) | 200 |
 | **Kraken** 🟡 | Ocean (under oil rigs) | 200 |
 
-🟡 Legendary creatures are extremely rare (1/100 spawn chance).
+🟡 Legendary creatures are extremely rare (1/50 spawn chance).
 
 ### Difficulty
 
-- Plane spawn rate increases from 1 every 2.5 seconds to 2 per second over 3 minutes
+- Plane spawn rate increases from 1 every 2.5 seconds to 3 per second over 4 minutes
 - Game speed gradually increases over time
 - If you hover at the same height for 1 second, a plane is sent directly at you
 
