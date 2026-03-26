@@ -111,8 +111,6 @@
 				9C36BADF2F6D20B2007431CF /* Alien Abduction */,
 			);
 			name = "Alien Abduction";
-			packageProductDependencies = (
-			);
 			productName = "Alien Abduction";
 			productReference = 9C36BADD2F6D20B2007431CF /* Alien Abduction.app */;
 			productType = "com.apple.product-type.application";
@@ -134,8 +132,6 @@
 				9C36BAF92F6D20B4007431CF /* Alien AbductionTests */,
 			);
 			name = "Alien AbductionTests";
-			packageProductDependencies = (
-			);
 			productName = "Alien AbductionTests";
 			productReference = 9C36BAF62F6D20B4007431CF /* Alien AbductionTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -157,8 +153,6 @@
 				9C36BB032F6D20B4007431CF /* Alien AbductionUITests */,
 			);
 			name = "Alien AbductionUITests";
-			packageProductDependencies = (
-			);
 			productName = "Alien AbductionUITests";
 			productReference = 9C36BB002F6D20B4007431CF /* Alien AbductionUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -401,6 +395,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 222Z9QQN6Q;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Alien-Abduction-Info.plist";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
@@ -437,6 +432,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 222Z9QQN6Q;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Alien-Abduction-Info.plist";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
@@ -586,6 +582,7 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
 	};
 	rootObject = 9C36BAD52F6D20B2007431CF /* Project object */;
 }

@@ -88,12 +88,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     private let saucerTopMargin: CGFloat = 50.0
     private let saucerBottomMargin: CGFloat = 140.0
 
-    // Scrolling ocean sprites
+    // Scrolling ocean sprites (two side by side for seamless loop)
     private var oceanSprite1: SKSpriteNode?
     private var oceanSprite2: SKSpriteNode?
 
-
-    // Tree spawning (land phase)
+    // Tree spawning (grassland phase)
     private var treeSpawnTimer: TimeInterval = 0
     private var treeSpawnInterval: TimeInterval = 1.2
 
@@ -122,6 +121,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     // Solid-color overlay that represents the old environment, scrolls off left during transition
     private var transitionOverlay1: SKSpriteNode?
     private var transitionOverlay2: SKSpriteNode?
+    private var grasslandOverlayNode: SKShapeNode?
 
     // Plane spawning
     private var planeSpawnTimer: TimeInterval = 0
@@ -158,8 +158,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     private let crossfadeLeadTime: TimeInterval = 3.0  // start crossfade this many seconds before track ends
     private var tractorBeamSoundAction: SKAction?
 
-    // Audio preferences (persisted)
-    // Audio keys are in CloudDataManager
+    // Audio preferences (persisted via iCloud)
     private var isMusicOff: Bool {
         get { dataManager.bool(forKey: CloudDataManager.musicOffKey) }
         set { dataManager.set(newValue, forKey: CloudDataManager.musicOffKey) }
@@ -358,13 +357,23 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     private func terrainHeight(at worldX: CGFloat) -> CGFloat {
         let flatHeight: CGFloat = 50.0
 
-        // Ocean and city phases are flat
-        if (gamePhase == .ocean || gamePhase == .city) && !isTransitioning {
+        // During transition FROM grassland, keep computing hills for the old side
+        if isTransitioning && transitionFromPhase == .grassland {
+            if worldX < transitionWorldX {
+                // Still on the grassland side — compute hills normally
+                return grasslandHeight(at: worldX)
+            } else {
+                return flatHeight
+            }
+        }
+
+        // During transition TO grassland (or between non-grassland phases), flat
+        if isTransitioning {
             return flatHeight
         }
 
-        // During transition: flat on both sides
-        if isTransitioning {
+        // Ocean and city phases are flat
+        if gamePhase == .ocean || gamePhase == .city {
             return flatHeight
         }
 
@@ -375,29 +384,40 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
 
         // Grassland terrain with rolling hills
         if gamePhase == .grassland {
-            let rampDistance: CGFloat = 500.0
-            let hillBlend = min(1.0, (worldX - landHillsStartWorldX) / rampDistance)
-
-            let baseHeight: CGFloat = 50.0
-            let hill1 = sin(worldX * 0.003) * 20.0
-            let hill2 = sin(worldX * 0.007 + 1.5) * 12.0
-            let hill3 = sin(worldX * 0.0015) * 15.0
-
-            let mountainCycle = worldX.truncatingRemainder(dividingBy: 1200.0)
-            var mountainBump: CGFloat = 0
-            if mountainCycle > 800 && mountainCycle < 1200 {
-                let t = (mountainCycle - 800.0) / 400.0
-                mountainBump = sin(t * .pi) * 100.0
-            }
-
-            let difficultyRise = min(CGFloat(elapsedTime) * 0.08, 60.0)
-
-            let hills = hill1 + hill2 + hill3 + mountainBump + difficultyRise
-            let total = baseHeight + hills * hillBlend
-            return max(total, 20.0)
+            return grasslandHeight(at: worldX)
         }
 
         return flatHeight
+    }
+
+    /// Computes grassland terrain height at a given world X position
+    private func grasslandHeight(at worldX: CGFloat) -> CGFloat {
+        let flatHeight: CGFloat = 50.0
+
+        if worldX < landHillsStartWorldX {
+            return flatHeight
+        }
+
+        let rampDistance: CGFloat = 500.0
+        let hillBlend = min(1.0, (worldX - landHillsStartWorldX) / rampDistance)
+
+        let baseHeight: CGFloat = 50.0
+        let hill1 = sin(worldX * 0.003) * 20.0
+        let hill2 = sin(worldX * 0.007 + 1.5) * 12.0
+        let hill3 = sin(worldX * 0.0015) * 15.0
+
+        let mountainCycle = worldX.truncatingRemainder(dividingBy: 1200.0)
+        var mountainBump: CGFloat = 0
+        if mountainCycle > 800 && mountainCycle < 1200 {
+            let t = (mountainCycle - 800.0) / 400.0
+            mountainBump = sin(t * .pi) * 100.0
+        }
+
+        let difficultyRise = min(CGFloat(elapsedTime) * 0.08, 60.0)
+
+        let hills = hill1 + hill2 + hill3 + mountainBump + difficultyRise
+        let total = baseHeight + hills * hillBlend
+        return max(total, 20.0)
     }
 
     /// Returns the max ground height currently visible on screen.
@@ -420,16 +440,72 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
 
+        // Pause/resume audio when app goes to background/foreground
+        NotificationCenter.default.addObserver(self, selector: #selector(appDidEnterBackground), name: .appDidEnterBackground, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(appWillEnterForeground), name: .appWillEnterForeground, object: nil)
+
+        showSplashScreen()
+    }
+
+    // MARK: - Splash Screen
+
+    private func showSplashScreen() {
+        // Black overlay covering entire screen
+        let splash = SKSpriteNode(color: .black, size: size)
+        splash.anchorPoint = .zero
+        splash.position = .zero
+        splash.zPosition = 500
+        splash.name = "splashScreen"
+        addChild(splash)
+
+        // "Bangar" on top, "Games" below
+        let bangarLabel = SKLabelNode(fontNamed: "AlienInvader")
+        bangarLabel.text = "Bangar"
+        bangarLabel.fontSize = 42
+        bangarLabel.yScale = fontYScale
+        bangarLabel.fontColor = SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
+        bangarLabel.position = CGPoint(x: size.width / 2, y: size.height / 2 + 25)
+        bangarLabel.zPosition = 501
+        bangarLabel.alpha = 0
+        bangarLabel.name = "splashScreen"
+        addChild(bangarLabel)
+
+        let gamesLabel = SKLabelNode(fontNamed: "AlienInvader")
+        gamesLabel.text = "Games"
+        gamesLabel.fontSize = 42
+        gamesLabel.yScale = fontYScale
+        gamesLabel.fontColor = SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
+        gamesLabel.position = CGPoint(x: size.width / 2, y: size.height / 2 - 35)
+        gamesLabel.zPosition = 501
+        gamesLabel.alpha = 0
+        gamesLabel.name = "splashScreen"
+        addChild(gamesLabel)
+
+        // Set up the game behind the splash screen
         setupAudio()
         setupBackground()
         setupGround()
         setupSaucer()
         showStartButton()
-        playMenuMusic()
 
-        // Pause/resume audio when app goes to background/foreground
-        NotificationCenter.default.addObserver(self, selector: #selector(appDidEnterBackground), name: .appDidEnterBackground, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(appWillEnterForeground), name: .appWillEnterForeground, object: nil)
+        // Fade in labels, hold, then fade out splash and start menu music
+        let labelFade = SKAction.sequence([
+            SKAction.fadeIn(withDuration: 0.6),
+            SKAction.wait(forDuration: 1.5),
+            SKAction.fadeOut(withDuration: 0.6)
+        ])
+        bangarLabel.run(labelFade)
+        gamesLabel.run(labelFade.copy() as! SKAction)
+
+        splash.run(SKAction.sequence([
+            SKAction.wait(forDuration: 2.4),
+            SKAction.fadeOut(withDuration: 0.6),
+            SKAction.removeFromParent(),
+            SKAction.run { [weak self] in
+                self?.children.filter { $0.name == "splashScreen" }.forEach { $0.removeFromParent() }
+                self?.playMenuMusic()
+            }
+        ]))
     }
 
     @objc private func appDidEnterBackground() {
@@ -759,7 +835,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         obj4.text = "Special Creatures"
         obj4.fontSize = 20
         obj4.yScale = fontYScale
-        obj4.fontColor = SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
+        obj4.fontColor = SKColor(red: 1.0, green: 0.85, blue: 0.2, alpha: 1.0)
         obj4.position = CGPoint(x: size.width / 2, y: size.height * 0.57)
         obj4.zPosition = 115
         obj4.name = "helpOverlay"
@@ -1088,7 +1164,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         movingUp = false
         movingDown = false
 
-        // Freeze all plane movement and saucer animation
+        // Freeze all moving objects
         tractorBeamActive = false
         removeTractorBeam()
         children.filter { $0.name == "plane" }.forEach { $0.isPaused = true }
@@ -1235,7 +1311,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         }.forEach { $0.removeFromParent() }
         pauseOverlay = nil
 
-        // Unfreeze planes, animals, and saucer
+        // Unfreeze all moving objects
         children.filter { $0.name == "plane" }.forEach { $0.isPaused = false }
         children.filter { $0.name == "animal" }.forEach { $0.isPaused = false }
         children.filter { $0.name == "oilRig" }.forEach { $0.isPaused = false }
@@ -1324,6 +1400,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
             transitionOverlay2?.removeFromParent()
             transitionOverlay1 = nil
             transitionOverlay2 = nil
+            grasslandOverlayNode?.removeFromParent()
+            grasslandOverlayNode = nil
             // If entering grassland, set flat stretch before hills
             if gamePhase == .grassland {
                 let flatDistance = baseGroundSpeed * speedMultiplier * 10.0
@@ -1607,6 +1685,21 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         }
     }
 
+    /// Returns (fillColor, strokeColor) for a given phase
+    private func groundColors(for phase: GamePhase) -> (SKColor, SKColor) {
+        switch phase {
+        case .ocean:
+            return (SKColor(red: 0.08, green: 0.20, blue: 0.50, alpha: 1.0),
+                    SKColor(red: 0.06, green: 0.15, blue: 0.40, alpha: 1.0))
+        case .grassland:
+            return (SKColor(red: 0.18, green: 0.40, blue: 0.12, alpha: 1.0),
+                    SKColor(red: 0.14, green: 0.34, blue: 0.09, alpha: 1.0))
+        case .city:
+            return (SKColor(red: 0.20, green: 0.20, blue: 0.22, alpha: 1.0),
+                    SKColor(red: 0.15, green: 0.15, blue: 0.17, alpha: 1.0))
+        }
+    }
+
     private func rebuildGroundPath() {
         let path = CGMutablePath()
         path.move(to: CGPoint(x: 0, y: 0))
@@ -1624,18 +1717,56 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
 
         groundNode.path = path
 
-        // Set ground color based on current phase
-        switch gamePhase {
-        case .ocean:
-            // Ocean sprites sit on top; ground underneath is dark blue fallback
-            groundNode.fillColor = SKColor(red: 0.08, green: 0.20, blue: 0.50, alpha: 1.0)
-            groundNode.strokeColor = SKColor(red: 0.06, green: 0.15, blue: 0.40, alpha: 1.0)
-        case .grassland:
-            groundNode.fillColor = SKColor(red: 0.18, green: 0.40, blue: 0.12, alpha: 1.0)
-            groundNode.strokeColor = SKColor(red: 0.14, green: 0.34, blue: 0.09, alpha: 1.0)
-        case .city:
-            groundNode.fillColor = SKColor(red: 0.20, green: 0.20, blue: 0.22, alpha: 1.0)
-            groundNode.strokeColor = SKColor(red: 0.15, green: 0.15, blue: 0.17, alpha: 1.0)
+        // During transition from grassland, draw the new phase color on the main ground
+        // and overlay the old grassland color on the left portion (before transitionWorldX)
+        if isTransitioning && transitionFromPhase == .grassland {
+            let (newFill, newStroke) = groundColors(for: gamePhase)
+            groundNode.fillColor = newFill
+            groundNode.strokeColor = newStroke
+
+            // Build a clipped grassland overlay for the old side
+            let splitScreenX = transitionWorldX - groundWorldOffset
+            if splitScreenX > 0 {
+                let oldPath = CGMutablePath()
+                oldPath.move(to: CGPoint(x: 0, y: 0))
+                var ox: CGFloat = 0
+                while ox <= min(splitScreenX, size.width + terrainResolution) {
+                    let worldX = groundWorldOffset + ox
+                    let h = terrainHeight(at: worldX)
+                    oldPath.addLine(to: CGPoint(x: ox, y: h))
+                    ox += terrainResolution
+                }
+                let clampedX = min(splitScreenX, size.width + terrainResolution)
+                let hEdge = terrainHeight(at: groundWorldOffset + clampedX)
+                oldPath.addLine(to: CGPoint(x: clampedX, y: hEdge))
+                oldPath.addLine(to: CGPoint(x: clampedX, y: 0))
+                oldPath.closeSubpath()
+
+                if grasslandOverlayNode == nil {
+                    let overlay = SKShapeNode()
+                    overlay.zPosition = groundNode.zPosition + 0.1
+                    overlay.lineWidth = 0
+                    addChild(overlay)
+                    grasslandOverlayNode = overlay
+                }
+                grasslandOverlayNode?.path = oldPath
+                grasslandOverlayNode?.fillColor = SKColor(red: 0.18, green: 0.40, blue: 0.12, alpha: 1.0)
+                grasslandOverlayNode?.strokeColor = SKColor(red: 0.14, green: 0.34, blue: 0.09, alpha: 1.0)
+                grasslandOverlayNode?.lineWidth = 0
+            } else {
+                // Grassland portion fully scrolled off
+                grasslandOverlayNode?.removeFromParent()
+                grasslandOverlayNode = nil
+            }
+        } else {
+            // No transition from grassland — remove overlay if present
+            grasslandOverlayNode?.removeFromParent()
+            grasslandOverlayNode = nil
+
+            // Set ground color based on current phase
+            let (fill, stroke) = groundColors(for: gamePhase)
+            groundNode.fillColor = fill
+            groundNode.strokeColor = stroke
         }
         groundNode.lineWidth = 1.5
 
@@ -1845,11 +1976,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
 
     private func createExplosion(at position: CGPoint) -> SKEmitterNode {
         let emitter = SKEmitterNode()
-        emitter.particleTexture = SKTexture(imageNamed: "spark") // falls back to square if missing
         emitter.position = position
         emitter.zPosition = 95
 
-        // Use a circle texture generated in code
+        // Generate a circle texture for particles
         let size = CGSize(width: 8, height: 8)
         UIGraphicsBeginImageContextWithOptions(size, false, 0)
         UIColor.white.setFill()
@@ -2131,7 +2261,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     private func handleTouchInput(location: CGPoint) {
         let third = size.width / 3
         if location.x > third * 2 {
-            // Right third — move up
+            // Right third — ascend
             movingUp = true
             movingDown = false
             tractorBeamActive = false
@@ -2144,7 +2274,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
             }
             tractorBeamActive = true
         } else {
-            // Left third — move down
+            // Left third — descend
             movingUp = false
             movingDown = true
             tractorBeamActive = false
@@ -2379,7 +2509,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     private func spawnAnimal() {
         let animalName: String
         var isLegendary = false
-        let legendaryRoll = Int.random(in: 1...100)
+        let legendaryRoll = Int.random(in: 1...50)
 
         if gamePhase == .ocean {
             animalName = "whale"
@@ -2470,9 +2600,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         let oilRig = SKSpriteNode(imageNamed: "oilRig")
         oilRig.size = CGSize(width: rigWidth, height: rigHeight)
         oilRig.name = "oilRig"
-        oilRig.zPosition = 7  // above ground and animals
+        oilRig.zPosition = 7
 
-        // Position on the water surface at the right edge
+        // Position on the ocean surface at the right edge
         let spawnScreenX = size.width + rigWidth
         let worldX = groundWorldOffset + spawnScreenX
         let groundY = terrainHeight(at: worldX)
@@ -2496,8 +2626,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         let moveLeft = SKAction.moveBy(x: -distance, y: 0, duration: duration)
         oilRig.run(SKAction.sequence([moveLeft, SKAction.removeFromParent()]))
 
-        // 1/20 chance to spawn a kraken underneath the oil rig
-        if Int.random(in: 1...100) == 1 {
+        // 1/50 chance to spawn a kraken underneath the oil rig
+        if Int.random(in: 1...50) == 1 {
             let krakenSize = CGSize(width: 60, height: 50)
             let kraken = SKSpriteNode(imageNamed: "kraken")
             kraken.size = krakenSize
@@ -2534,7 +2664,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         let tree = SKSpriteNode(imageNamed: "tree1")
         tree.size = CGSize(width: treeWidth, height: treeHeight)
         tree.name = "tree"
-        tree.zPosition = 6  // above ground, same layer as animals
+        tree.zPosition = 6
 
         // Position on the terrain surface at the right edge
         let spawnScreenX = size.width + treeWidth
@@ -2596,8 +2726,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         let moveLeft = SKAction.moveBy(x: -distance, y: 0, duration: duration)
         building.run(SKAction.sequence([moveLeft, SKAction.removeFromParent()]))
 
-        // 1/20 chance to spawn a werewolf on top of the skyscraper
-        if Int.random(in: 1...100) == 1 {
+        // 1/50 chance to spawn a werewolf on top of the skyscraper
+        if Int.random(in: 1...50) == 1 {
             let wwSize = CGSize(width: 40, height: 50)
             let werewolf = SKSpriteNode(imageNamed: "werewolf")
             werewolf.size = wwSize
@@ -2710,9 +2840,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     // MARK: - Difficulty
 
     private func increaseDifficulty() {
-        // Start at 2.5s, linearly decrease to 0.5s (2 per second) over 180 seconds (3 minutes)
-        let t = min(elapsedTime / 180.0, 1.0)
-        planeSpawnInterval = 2.5 - t * 2.0  // 2.5 → 0.5
+        // Start at 2.5s, linearly decrease to 0.33s (3 per second) over 240 seconds (4 minutes)
+        let t = min(elapsedTime / 240.0, 1.0)
+        planeSpawnInterval = 2.5 - t * 2.17  // 2.5 → 0.33
     }
 
     // MARK: - GKGameCenterControllerDelegate
