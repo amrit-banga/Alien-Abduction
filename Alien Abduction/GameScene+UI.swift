@@ -618,11 +618,12 @@ extension GameScene {
         addChild(scoreLabel)
 
         // Pause button — top left, solid button
+        let pauseButtonY = UIDevice.current.userInterfaceIdiom == .pad ? hudY - 40 : hudY
         pauseButton = SKShapeNode(rectOf: CGSize(width: 50, height: 36), cornerRadius: 8)
         pauseButton.fillColor = SKColor(white: 0.3, alpha: 0.8)
         pauseButton.strokeColor = .white
         pauseButton.lineWidth = 2
-        pauseButton.position = CGPoint(x: 45, y: hudY)
+        pauseButton.position = CGPoint(x: 45, y: pauseButtonY)
         pauseButton.zPosition = 200
         pauseButton.name = "pauseButton"
         let pauseLbl = SKLabelNode(fontNamed: "AlienInvader")

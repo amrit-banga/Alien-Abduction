@@ -13,33 +13,38 @@ import CoreText
 
 class GameViewController: UIViewController {
 
+    private var didPresentScene = false
+
     override func viewDidLoad() {
         super.viewDidLoad()
 
         registerCustomFonts()
 
-        guard let view = self.view as? SKView else { return }
-
-        // Create scene programmatically sized to the view
-        let scene = GameScene(size: view.bounds.size)
-        scene.scaleMode = .aspectFill
-
-        view.presentScene(scene)
-        view.ignoresSiblingOrder = true
-
-        view.showsFPS = true
-        view.showsNodeCount = true
-
         // Authenticate Game Center for leaderboards & iCloud sync
         CloudDataManager.shared.authenticateGameCenter(from: self)
     }
 
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            return .allButUpsideDown
-        } else {
-            return .all
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard let skView = view as? SKView else { return }
+
+        if !didPresentScene {
+            didPresentScene = true
+
+            // Create scene now that the view's layout is final
+            let scene = GameScene(size: skView.bounds.size)
+            scene.scaleMode = .aspectFill
+
+            skView.presentScene(scene)
+            skView.ignoresSiblingOrder = true
+
+            skView.showsFPS = true
+            skView.showsNodeCount = true
         }
+    }
+
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        return .portrait
     }
 
     override var prefersStatusBarHidden: Bool {
