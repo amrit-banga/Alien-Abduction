@@ -81,5 +81,5 @@ Environments cycle randomly after the initial sequence (ocean → grassland → 
 
 - Custom font: Alien Invader
 - Sprite atlas: 96-frame saucer animation
-- Original music tracks and creature sound effects
+- Royalty free music tracks and creature sound effects
 - All Assets are royalty free assets 
