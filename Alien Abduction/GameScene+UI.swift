@@ -6,7 +6,126 @@
 import SpriteKit
 import GameKit
 
+/// Geometry shared by the SpriteKit HUD and pause menu. Keeping these values in
+/// one place makes the controls predictable on short iPhone-compatibility
+/// viewports as well as on full-screen iPhones.
+enum GameUILayout {
+    static let contentInset: CGFloat = 16
+    static let hudControlSize = CGSize(width: 50, height: 36)
+    static let scoreBackgroundSize = CGSize(width: 100, height: 36)
+    static let pauseMenuButtonSize = CGSize(width: 180, height: 55)
+    static let pauseMenuButtonGap: CGFloat = 14
+
+    static func hudCenters(
+        in safeFrame: CGRect,
+        pauseTopInset: CGFloat = contentInset,
+        scoreTopInset: CGFloat = contentInset
+    ) -> (pause: CGPoint, score: CGPoint) {
+        let pauseY = max(
+            safeFrame.minY + hudControlSize.height / 2,
+            safeFrame.maxY - pauseTopInset - hudControlSize.height / 2
+        )
+        let scoreY = max(
+            safeFrame.minY + scoreBackgroundSize.height / 2,
+            safeFrame.maxY - scoreTopInset - scoreBackgroundSize.height / 2
+        )
+        let pauseX = safeFrame.minX + contentInset + hudControlSize.width / 2
+
+        return (
+            pause: CGPoint(x: pauseX, y: pauseY),
+            score: CGPoint(x: safeFrame.midX, y: scoreY)
+        )
+    }
+
+    static func pauseMenuPositions(in safeFrame: CGRect) -> (titleY: CGFloat, buttonYs: [CGFloat]) {
+        let centerSpacing = pauseMenuButtonSize.height + pauseMenuButtonGap
+        let halfButtonHeight = pauseMenuButtonSize.height / 2
+
+        // Retain the original visual balance on iPhone, while guaranteeing that
+        // all four controls fit with a real gap on shorter compatibility views.
+        let preferredResumeY = safeFrame.minY + safeFrame.height * 0.45
+        let minimumResumeY = safeFrame.minY + contentInset + halfButtonHeight + centerSpacing * 3
+        let maximumResumeY = safeFrame.maxY - contentInset - halfButtonHeight
+        let resumeY = min(max(preferredResumeY, minimumResumeY), maximumResumeY)
+        let buttonYs = (0..<4).map { resumeY - CGFloat($0) * centerSpacing }
+
+        let titleHalfHeight: CGFloat = 31
+        let titleGap: CGFloat = 16
+        let preferredTitleY = safeFrame.minY + safeFrame.height * 0.60
+        let minimumTitleY = resumeY + halfButtonHeight + titleGap + titleHalfHeight
+        let maximumTitleY = safeFrame.maxY - contentInset - titleHalfHeight
+        let titleY = min(max(preferredTitleY, minimumTitleY), maximumTitleY)
+
+        return (titleY: titleY, buttonYs: buttonYs)
+    }
+}
+
 extension GameScene {
+
+    /// iPad compatibility windows need the larger inset that avoids their
+    /// rounded/cropped edge. On iPhone, a small inset restores the HUD's
+    /// original alignment with the moon while keeping the button visible.
+    var isRunningOnIPad: Bool {
+        UIDevice.current.userInterfaceIdiom == .pad || UIDevice.current.model == "iPad"
+    }
+
+    var pauseTopInset: CGFloat {
+        isRunningOnIPad ? GameUILayout.contentInset : -18
+    }
+
+    /// iPhone score sits directly beneath the notch; iPad compatibility mode
+    /// keeps the larger edge clearance required by its cropped window.
+    var scoreTopInset: CGFloat {
+        isRunningOnIPad ? GameUILayout.contentInset : 2
+    }
+
+    /// The safe area expressed in scene coordinates. Converting the view's
+    /// layout frame also accounts for SpriteKit scaling/cropping, which is
+    /// important when an iPhone-only app runs in iPad compatibility mode.
+    var safeSceneFrame: CGRect {
+        guard let view else { return frame }
+
+        let safeViewFrame = view.safeAreaLayoutGuide.layoutFrame
+        guard !safeViewFrame.isEmpty else { return frame }
+
+        let topLeft = convertPoint(fromView: CGPoint(x: safeViewFrame.minX, y: safeViewFrame.minY))
+        let bottomRight = convertPoint(fromView: CGPoint(x: safeViewFrame.maxX, y: safeViewFrame.maxY))
+        let convertedFrame = CGRect(
+            x: min(topLeft.x, bottomRight.x),
+            y: min(topLeft.y, bottomRight.y),
+            width: abs(bottomRight.x - topLeft.x),
+            height: abs(topLeft.y - bottomRight.y)
+        )
+
+        let visibleSafeFrame = convertedFrame.intersection(frame)
+        return visibleSafeFrame.isEmpty ? frame : visibleSafeFrame
+    }
+
+    /// Repositions controls after UIKit updates the compatibility window or its
+    /// safe-area insets.
+    func layoutInterfaceNodes() {
+        let safeFrame = safeSceneFrame
+        let hud = GameUILayout.hudCenters(
+            in: safeFrame,
+            pauseTopInset: pauseTopInset,
+            scoreTopInset: scoreTopInset
+        )
+
+        children.first(where: { $0.name == "hudElement" })?.position = hud.score
+        scoreLabel?.position = hud.score
+        pauseButton?.position = hud.pause
+
+        guard gameState == .paused else { return }
+        let pauseMenu = GameUILayout.pauseMenuPositions(in: safeFrame)
+        children.compactMap { $0 as? SKLabelNode }
+            .first(where: { $0.name == "pauseOverlay" })?
+            .position = CGPoint(x: safeFrame.midX, y: pauseMenu.titleY)
+
+        let buttonNames = ["resumeButton", "musicToggleButton", "soundToggleButton", "quitButton"]
+        for (name, y) in zip(buttonNames, pauseMenu.buttonYs) {
+            children.first(where: { $0.name == name })?.position = CGPoint(x: safeFrame.midX, y: y)
+        }
+    }
 
     func showSplashScreen() {
         // Black overlay covering entire screen
@@ -166,7 +285,7 @@ extension GameScene {
         overlay.anchorPoint = .zero
         overlay.position = .zero
         overlay.zPosition = 110
-        overlay.alpha = 0.85
+        overlay.alpha = 1.0
         overlay.name = "statsOverlay"
         addChild(overlay)
         statsOverlay = overlay
@@ -321,7 +440,7 @@ extension GameScene {
         overlay.anchorPoint = .zero
         overlay.position = .zero
         overlay.zPosition = 110
-        overlay.alpha = 0.9
+        overlay.alpha = 1.0
         overlay.name = "helpOverlay"
         addChild(overlay)
         helpOverlay = overlay
@@ -575,7 +694,18 @@ extension GameScene {
         closeLbl.fontSize = 18
         closeLbl.yScale = fontYScale
         closeLbl.fontColor = SKColor(white: 1.0, alpha: 0.6)
-        closeLbl.position = CGPoint(x: size.width / 2, y: size.height * 0.12)
+        closeLbl.verticalAlignmentMode = .center
+
+        // Keep the close hint below the control-zone instructions. On taller
+        // iPhones the preferred position is unchanged; shorter compatibility
+        // viewports move it down just enough to prevent an overlap.
+        let closeLabelHalfHeight = closeLbl.fontSize * fontYScale / 2
+        let preferredCloseY = size.height * 0.12
+        let controlZoneBottom = zoneY - zoneH / 2
+        let highestNonOverlappingY = controlZoneBottom - 12 - closeLabelHalfHeight
+        let lowestSafeY = safeSceneFrame.minY + GameUILayout.contentInset + closeLabelHalfHeight
+        let closeY = max(lowestSafeY, min(preferredCloseY, highestNonOverlappingY))
+        closeLbl.position = CGPoint(x: safeSceneFrame.midX, y: closeY)
         closeLbl.zPosition = 115
         closeLbl.name = "helpOverlay"
         addChild(closeLbl)
@@ -587,20 +717,17 @@ extension GameScene {
     }
 
     func setupHUD() {
-        // Account for safe area (notch / Dynamic Island)
-        let safeTop: CGFloat
-        if let window = view?.window {
-            safeTop = window.safeAreaInsets.top
-        } else {
-            safeTop = 60  // sensible default for notched devices
-        }
-        let hudY = size.height - safeTop - 10
+        let hud = GameUILayout.hudCenters(
+            in: safeSceneFrame,
+            pauseTopInset: pauseTopInset,
+            scoreTopInset: scoreTopInset
+        )
 
         // Score background pill
-        let scoreBg = SKShapeNode(rectOf: CGSize(width: 100, height: 36), cornerRadius: 10)
+        let scoreBg = SKShapeNode(rectOf: GameUILayout.scoreBackgroundSize, cornerRadius: 10)
         scoreBg.fillColor = SKColor(white: 0.0, alpha: 0.5)
         scoreBg.strokeColor = .clear
-        scoreBg.position = CGPoint(x: size.width / 2, y: hudY)
+        scoreBg.position = hud.score
         scoreBg.zPosition = 199
         scoreBg.name = "hudElement"
         addChild(scoreBg)
@@ -612,18 +739,17 @@ extension GameScene {
         scoreLabel.yScale = fontYScale
         scoreLabel.fontColor = SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
         scoreLabel.verticalAlignmentMode = .center
-        scoreLabel.position = CGPoint(x: size.width / 2, y: hudY)
+        scoreLabel.position = hud.score
         scoreLabel.zPosition = 200
         scoreLabel.name = "scoreLabel"
         addChild(scoreLabel)
 
-        // Pause button — top left, solid button
-        let pauseButtonY = UIDevice.current.userInterfaceIdiom == .pad ? hudY - 40 : hudY
-        pauseButton = SKShapeNode(rectOf: CGSize(width: 50, height: 36), cornerRadius: 8)
+        // Pause button — inside the converted safe area on every device.
+        pauseButton = SKShapeNode(rectOf: GameUILayout.hudControlSize, cornerRadius: 8)
         pauseButton.fillColor = SKColor(white: 0.3, alpha: 0.8)
         pauseButton.strokeColor = .white
         pauseButton.lineWidth = 2
-        pauseButton.position = CGPoint(x: 45, y: pauseButtonY)
+        pauseButton.position = hud.pause
         pauseButton.zPosition = 200
         pauseButton.name = "pauseButton"
         let pauseLbl = SKLabelNode(fontNamed: "AlienInvader")
@@ -663,22 +789,26 @@ extension GameScene {
         addChild(overlay)
         pauseOverlay = overlay
 
+        let safeFrame = safeSceneFrame
+        let pauseMenu = GameUILayout.pauseMenuPositions(in: safeFrame)
+
         let pausedLabel = SKLabelNode(fontNamed: "AlienInvader")
         pausedLabel.text = "Paused"
         pausedLabel.fontSize = 44
         pausedLabel.yScale = fontYScale
         pausedLabel.fontColor = .white
-        pausedLabel.position = CGPoint(x: size.width / 2, y: size.height * 0.6)
+        pausedLabel.verticalAlignmentMode = .center
+        pausedLabel.position = CGPoint(x: safeFrame.midX, y: pauseMenu.titleY)
         pausedLabel.zPosition = 95
         pausedLabel.name = "pauseOverlay"
         addChild(pausedLabel)
 
         // Resume button
-        let resumeBtn = SKShapeNode(rectOf: CGSize(width: 180, height: 55), cornerRadius: 14)
+        let resumeBtn = SKShapeNode(rectOf: GameUILayout.pauseMenuButtonSize, cornerRadius: 14)
         resumeBtn.fillColor = SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
         resumeBtn.strokeColor = .white
         resumeBtn.lineWidth = 2
-        resumeBtn.position = CGPoint(x: size.width / 2, y: size.height * 0.45)
+        resumeBtn.position = CGPoint(x: safeFrame.midX, y: pauseMenu.buttonYs[0])
         resumeBtn.zPosition = 95
         resumeBtn.name = "resumeButton"
         let resumeLbl = SKLabelNode(fontNamed: "AlienInvader")
@@ -691,11 +821,11 @@ extension GameScene {
         addChild(resumeBtn)
 
         // Music toggle button
-        let musicBtn = SKShapeNode(rectOf: CGSize(width: 180, height: 55), cornerRadius: 14)
+        let musicBtn = SKShapeNode(rectOf: GameUILayout.pauseMenuButtonSize, cornerRadius: 14)
         musicBtn.fillColor = isMusicOff ? SKColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1.0) : SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
         musicBtn.strokeColor = .white
         musicBtn.lineWidth = 2
-        musicBtn.position = CGPoint(x: size.width / 2, y: size.height * 0.38)
+        musicBtn.position = CGPoint(x: safeFrame.midX, y: pauseMenu.buttonYs[1])
         musicBtn.zPosition = 95
         musicBtn.name = "musicToggleButton"
         let musicLbl = SKLabelNode(fontNamed: "AlienInvader")
@@ -709,11 +839,11 @@ extension GameScene {
         addChild(musicBtn)
 
         // Sound toggle button
-        let soundBtn = SKShapeNode(rectOf: CGSize(width: 180, height: 55), cornerRadius: 14)
+        let soundBtn = SKShapeNode(rectOf: GameUILayout.pauseMenuButtonSize, cornerRadius: 14)
         soundBtn.fillColor = isSoundOff ? SKColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1.0) : SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
         soundBtn.strokeColor = .white
         soundBtn.lineWidth = 2
-        soundBtn.position = CGPoint(x: size.width / 2, y: size.height * 0.30)
+        soundBtn.position = CGPoint(x: safeFrame.midX, y: pauseMenu.buttonYs[2])
         soundBtn.zPosition = 95
         soundBtn.name = "soundToggleButton"
         let soundLbl = SKLabelNode(fontNamed: "AlienInvader")
@@ -727,11 +857,11 @@ extension GameScene {
         addChild(soundBtn)
 
         // Quit button
-        let quitBtn = SKShapeNode(rectOf: CGSize(width: 180, height: 55), cornerRadius: 14)
+        let quitBtn = SKShapeNode(rectOf: GameUILayout.pauseMenuButtonSize, cornerRadius: 14)
         quitBtn.fillColor = SKColor(red: 0.8, green: 0.2, blue: 0.2, alpha: 1.0)
         quitBtn.strokeColor = .white
         quitBtn.lineWidth = 2
-        quitBtn.position = CGPoint(x: size.width / 2, y: size.height * 0.20)
+        quitBtn.position = CGPoint(x: safeFrame.midX, y: pauseMenu.buttonYs[3])
         quitBtn.zPosition = 95
         quitBtn.name = "quitButton"
         let quitLbl = SKLabelNode(fontNamed: "AlienInvader")

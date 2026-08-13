@@ -41,6 +41,10 @@ class GameViewController: UIViewController {
             skView.showsFPS = true
             skView.showsNodeCount = true
         }
+
+        // Compatibility-mode safe areas can settle after the scene is first
+        // presented. Keep interactive controls aligned with the final frame.
+        (skView.scene as? GameScene)?.layoutInterfaceNodes()
     }
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
