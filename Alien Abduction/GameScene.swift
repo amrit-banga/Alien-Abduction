@@ -123,6 +123,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     // Skyscraper spawning (city phase)
     var skyscraperSpawnTimer: TimeInterval = 0
     var skyscraperSpawnInterval: TimeInterval = 1.5
+    let skyscraperTransitionClearance: TimeInterval = 3.25
 
     // Power-ups
     var powerUpSpawnTimer: TimeInterval = 0

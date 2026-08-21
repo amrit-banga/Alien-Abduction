@@ -265,6 +265,28 @@ final class Alien_AbductionTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(scene.cityDetailNode).isHidden)
     }
 
+    func testSkyscrapersStopSpawningBeforeCityTransition() {
+        let scene = GameScene(size: CGSize(width: 390, height: 844))
+        scene.gamePhase = .city
+        scene.initialSequenceComplete = true
+        scene.phaseStartTime = 0
+        scene.currentPhaseDuration = 60
+        scene.skyscraperSpawnTimer = scene.skyscraperSpawnInterval
+
+        scene.elapsedTime = 56
+        scene.updateSkyscraperSpawning(dt: 0)
+        XCTAssertNotNil(scene.children.first { $0.name == "skyscraper" })
+
+        scene.children.filter { $0.name == "skyscraper" }.forEach { $0.removeFromParent() }
+        scene.skyscraperSpawnTimer = scene.skyscraperSpawnInterval
+        scene.elapsedTime = 57
+        scene.updateSkyscraperSpawning(dt: 0)
+        XCTAssertNil(scene.children.first { $0.name == "skyscraper" })
+
+        let maximumEntryTime = TimeInterval((240 * 1.5) / scene.baseGroundSpeed)
+        XCTAssertGreaterThan(scene.skyscraperTransitionClearance, maximumEntryTime)
+    }
+
     func testShieldVisualDoesNotChangeSaucerHitbox() throws {
         let scene = GameScene(size: CGSize(width: 390, height: 844))
         let saucer = SKSpriteNode(color: .clear, size: CGSize(width: 90, height: 90))

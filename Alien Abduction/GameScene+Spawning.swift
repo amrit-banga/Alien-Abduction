@@ -345,7 +345,12 @@ extension GameScene {
     }
 
     func updateSkyscraperSpawning(dt: TimeInterval) {
-        guard gamePhase == .city && !isTransitioning && !nearingPhaseEnd() else { return }
+        // Skyscrapers can be 240 points wide and begin fully offscreen. Stop
+        // spawning them early enough that the complete sprite reaches the city
+        // side of the upcoming boundary before another biome appears.
+        guard gamePhase == .city,
+              !isTransitioning,
+              !nearingPhaseEnd(buffer: skyscraperTransitionClearance) else { return }
         skyscraperSpawnTimer += dt
         if skyscraperSpawnTimer >= skyscraperSpawnInterval {
             skyscraperSpawnTimer = 0
@@ -384,6 +389,7 @@ extension GameScene {
         let distance = size.width + buildingWidth * 2
         let duration = TimeInterval(distance / speed)
         let moveLeft = SKAction.moveBy(x: -distance, y: 0, duration: duration)
+        moveLeft.timingMode = .linear
         building.run(SKAction.sequence([moveLeft, SKAction.removeFromParent()]))
 
         // 1/50 chance to spawn a werewolf on top of the skyscraper
