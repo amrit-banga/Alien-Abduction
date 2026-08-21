@@ -42,12 +42,12 @@ enum GameUILayout {
         let halfButtonHeight = pauseMenuButtonSize.height / 2
 
         // Retain the original visual balance on iPhone, while guaranteeing that
-        // all four controls fit with a real gap on shorter compatibility views.
+        // all five controls fit with a real gap on shorter compatibility views.
         let preferredResumeY = safeFrame.minY + safeFrame.height * 0.45
-        let minimumResumeY = safeFrame.minY + contentInset + halfButtonHeight + centerSpacing * 3
+        let minimumResumeY = safeFrame.minY + contentInset + halfButtonHeight + centerSpacing * 4
         let maximumResumeY = safeFrame.maxY - contentInset - halfButtonHeight
         let resumeY = min(max(preferredResumeY, minimumResumeY), maximumResumeY)
-        let buttonYs = (0..<4).map { resumeY - CGFloat($0) * centerSpacing }
+        let buttonYs = (0..<5).map { resumeY - CGFloat($0) * centerSpacing }
 
         let titleHalfHeight: CGFloat = 31
         let titleGap: CGFloat = 16
@@ -113,6 +113,7 @@ extension GameScene {
 
         children.first(where: { $0.name == "hudElement" })?.position = hud.score
         scoreLabel?.position = hud.score
+        doublePointsIndicator?.position = CGPoint(x: hud.score.x, y: hud.score.y - 40)
         pauseButton?.position = hud.pause
 
         guard gameState == .paused else { return }
@@ -121,7 +122,7 @@ extension GameScene {
             .first(where: { $0.name == "pauseOverlay" })?
             .position = CGPoint(x: safeFrame.midX, y: pauseMenu.titleY)
 
-        let buttonNames = ["resumeButton", "musicToggleButton", "soundToggleButton", "quitButton"]
+        let buttonNames = ["resumeButton", "controlsButton", "musicToggleButton", "soundToggleButton", "quitButton"]
         for (name, y) in zip(buttonNames, pauseMenu.buttonYs) {
             children.first(where: { $0.name == name })?.position = CGPoint(x: safeFrame.midX, y: y)
         }
@@ -258,7 +259,7 @@ extension GameScene {
         statsButton.addChild(statsLabel)
         addChild(statsButton)
 
-        // Help button below stats
+        // Controls button below stats
         let helpBtnW: CGFloat = 160
         let helpBtnH: CGFloat = 50
         helpButton = SKShapeNode(rectOf: CGSize(width: helpBtnW, height: helpBtnH), cornerRadius: 12)
@@ -270,8 +271,8 @@ extension GameScene {
         helpButton.name = "helpButton"
 
         let helpLabel = SKLabelNode(fontNamed: "AlienInvader")
-        helpLabel.text = "HELP"
-        helpLabel.fontSize = 24
+        helpLabel.text = "CONTROLS"
+        helpLabel.fontSize = 21
         helpLabel.yScale = fontYScale
         helpLabel.fontColor = .white
         helpLabel.verticalAlignmentMode = .center
@@ -435,12 +436,17 @@ extension GameScene {
         statsOverlay = nil
     }
 
-    func showHelpOverlay() {
+    func showHelpOverlay(
+        resumesGameOnDismissal: Bool = false,
+        transparentBackground: Bool = false
+    ) {
+        self.resumesGameAfterHelpDismissal = resumesGameOnDismissal
+
         let overlay = SKSpriteNode(color: .black, size: size)
         overlay.anchorPoint = .zero
         overlay.position = .zero
-        overlay.zPosition = 110
-        overlay.alpha = 1.0
+        overlay.zPosition = 300
+        overlay.alpha = transparentBackground ? 0.82 : 1.0
         overlay.name = "helpOverlay"
         addChild(overlay)
         helpOverlay = overlay
@@ -452,7 +458,7 @@ extension GameScene {
         titleLbl.yScale = fontYScale
         titleLbl.fontColor = SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
         titleLbl.position = CGPoint(x: size.width / 2, y: size.height * 0.82)
-        titleLbl.zPosition = 115
+        titleLbl.zPosition = 305
         titleLbl.name = "helpOverlay"
         addChild(titleLbl)
 
@@ -463,7 +469,7 @@ extension GameScene {
         obj1.yScale = fontYScale
         obj1.fontColor = .white
         obj1.position = CGPoint(x: size.width / 2, y: size.height * 0.72)
-        obj1.zPosition = 115
+        obj1.zPosition = 305
         obj1.name = "helpOverlay"
         addChild(obj1)
 
@@ -474,7 +480,7 @@ extension GameScene {
         obj2.yScale = fontYScale
         obj2.fontColor = .white
         obj2.position = CGPoint(x: size.width / 2, y: size.height * 0.67)
-        obj2.zPosition = 115
+        obj2.zPosition = 305
         obj2.name = "helpOverlay"
         addChild(obj2)
 
@@ -485,7 +491,7 @@ extension GameScene {
         obj3.yScale = fontYScale
         obj3.fontColor = .white
         obj3.position = CGPoint(x: size.width / 2, y: size.height * 0.62)
-        obj3.zPosition = 115
+        obj3.zPosition = 305
         obj3.name = "helpOverlay"
         addChild(obj3)
 
@@ -495,7 +501,7 @@ extension GameScene {
         obj4.yScale = fontYScale
         obj4.fontColor = SKColor(red: 1.0, green: 0.85, blue: 0.2, alpha: 1.0)
         obj4.position = CGPoint(x: size.width / 2, y: size.height * 0.57)
-        obj4.zPosition = 115
+        obj4.zPosition = 305
         obj4.name = "helpOverlay"
         addChild(obj4)
 
@@ -506,7 +512,7 @@ extension GameScene {
         ctrlTitle.yScale = fontYScale
         ctrlTitle.fontColor = SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
         ctrlTitle.position = CGPoint(x: size.width / 2, y: size.height * 0.47)
-        ctrlTitle.zPosition = 115
+        ctrlTitle.zPosition = 305
         ctrlTitle.name = "helpOverlay"
         addChild(ctrlTitle)
 
@@ -521,7 +527,7 @@ extension GameScene {
         leftZone.strokeColor = SKColor(white: 1.0, alpha: 0.4)
         leftZone.lineWidth = 1.5
         leftZone.position = CGPoint(x: thirdW / 2, y: zoneY)
-        leftZone.zPosition = 115
+        leftZone.zPosition = 305
         leftZone.name = "helpOverlay"
         addChild(leftZone)
 
@@ -532,7 +538,7 @@ extension GameScene {
         leftTitle.fontColor = SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
         leftTitle.verticalAlignmentMode = .center
         leftTitle.position = CGPoint(x: thirdW / 2, y: zoneY + 30)
-        leftTitle.zPosition = 116
+        leftTitle.zPosition = 306
         leftTitle.name = "helpOverlay"
         addChild(leftTitle)
 
@@ -543,7 +549,7 @@ extension GameScene {
         leftDesc1.fontColor = .white
         leftDesc1.verticalAlignmentMode = .center
         leftDesc1.position = CGPoint(x: thirdW / 2, y: zoneY - 5)
-        leftDesc1.zPosition = 116
+        leftDesc1.zPosition = 306
         leftDesc1.name = "helpOverlay"
         addChild(leftDesc1)
 
@@ -554,7 +560,7 @@ extension GameScene {
         leftDesc2.fontColor = .white
         leftDesc2.verticalAlignmentMode = .center
         leftDesc2.position = CGPoint(x: thirdW / 2, y: zoneY - 25)
-        leftDesc2.zPosition = 116
+        leftDesc2.zPosition = 306
         leftDesc2.name = "helpOverlay"
         addChild(leftDesc2)
 
@@ -565,7 +571,7 @@ extension GameScene {
         leftDesc3.fontColor = .white
         leftDesc3.verticalAlignmentMode = .center
         leftDesc3.position = CGPoint(x: thirdW / 2, y: zoneY - 45)
-        leftDesc3.zPosition = 116
+        leftDesc3.zPosition = 306
         leftDesc3.name = "helpOverlay"
         addChild(leftDesc3)
 
@@ -575,7 +581,7 @@ extension GameScene {
         midZone.strokeColor = SKColor(white: 1.0, alpha: 0.4)
         midZone.lineWidth = 1.5
         midZone.position = CGPoint(x: size.width / 2, y: zoneY)
-        midZone.zPosition = 115
+        midZone.zPosition = 305
         midZone.name = "helpOverlay"
         addChild(midZone)
 
@@ -586,7 +592,7 @@ extension GameScene {
         midTitle1.fontColor = SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
         midTitle1.verticalAlignmentMode = .center
         midTitle1.position = CGPoint(x: size.width / 2, y: zoneY + 40)
-        midTitle1.zPosition = 116
+        midTitle1.zPosition = 306
         midTitle1.name = "helpOverlay"
         addChild(midTitle1)
 
@@ -597,7 +603,7 @@ extension GameScene {
         midTitle2.fontColor = SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
         midTitle2.verticalAlignmentMode = .center
         midTitle2.position = CGPoint(x: size.width / 2, y: zoneY + 18)
-        midTitle2.zPosition = 116
+        midTitle2.zPosition = 306
         midTitle2.name = "helpOverlay"
         addChild(midTitle2)
 
@@ -608,7 +614,7 @@ extension GameScene {
         midDesc1.fontColor = .white
         midDesc1.verticalAlignmentMode = .center
         midDesc1.position = CGPoint(x: size.width / 2, y: zoneY - 10)
-        midDesc1.zPosition = 116
+        midDesc1.zPosition = 306
         midDesc1.name = "helpOverlay"
         addChild(midDesc1)
 
@@ -619,7 +625,7 @@ extension GameScene {
         midDesc2.fontColor = .white
         midDesc2.verticalAlignmentMode = .center
         midDesc2.position = CGPoint(x: size.width / 2, y: zoneY - 30)
-        midDesc2.zPosition = 116
+        midDesc2.zPosition = 306
         midDesc2.name = "helpOverlay"
         addChild(midDesc2)
 
@@ -630,7 +636,7 @@ extension GameScene {
         midDesc3.fontColor = .white
         midDesc3.verticalAlignmentMode = .center
         midDesc3.position = CGPoint(x: size.width / 2, y: zoneY - 50)
-        midDesc3.zPosition = 116
+        midDesc3.zPosition = 306
         midDesc3.name = "helpOverlay"
         addChild(midDesc3)
 
@@ -640,7 +646,7 @@ extension GameScene {
         rightZone.strokeColor = SKColor(white: 1.0, alpha: 0.4)
         rightZone.lineWidth = 1.5
         rightZone.position = CGPoint(x: thirdW * 2 + thirdW / 2, y: zoneY)
-        rightZone.zPosition = 115
+        rightZone.zPosition = 305
         rightZone.name = "helpOverlay"
         addChild(rightZone)
 
@@ -651,7 +657,7 @@ extension GameScene {
         rightTitle.fontColor = SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
         rightTitle.verticalAlignmentMode = .center
         rightTitle.position = CGPoint(x: thirdW * 2 + thirdW / 2, y: zoneY + 30)
-        rightTitle.zPosition = 116
+        rightTitle.zPosition = 306
         rightTitle.name = "helpOverlay"
         addChild(rightTitle)
 
@@ -662,7 +668,7 @@ extension GameScene {
         rightDesc1.fontColor = .white
         rightDesc1.verticalAlignmentMode = .center
         rightDesc1.position = CGPoint(x: thirdW * 2 + thirdW / 2, y: zoneY - 5)
-        rightDesc1.zPosition = 116
+        rightDesc1.zPosition = 306
         rightDesc1.name = "helpOverlay"
         addChild(rightDesc1)
 
@@ -673,7 +679,7 @@ extension GameScene {
         rightDesc2.fontColor = .white
         rightDesc2.verticalAlignmentMode = .center
         rightDesc2.position = CGPoint(x: thirdW * 2 + thirdW / 2, y: zoneY - 25)
-        rightDesc2.zPosition = 116
+        rightDesc2.zPosition = 306
         rightDesc2.name = "helpOverlay"
         addChild(rightDesc2)
 
@@ -684,7 +690,7 @@ extension GameScene {
         rightDesc3.fontColor = .white
         rightDesc3.verticalAlignmentMode = .center
         rightDesc3.position = CGPoint(x: thirdW * 2 + thirdW / 2, y: zoneY - 45)
-        rightDesc3.zPosition = 116
+        rightDesc3.zPosition = 306
         rightDesc3.name = "helpOverlay"
         addChild(rightDesc3)
 
@@ -706,7 +712,7 @@ extension GameScene {
         let lowestSafeY = safeSceneFrame.minY + GameUILayout.contentInset + closeLabelHalfHeight
         let closeY = max(lowestSafeY, min(preferredCloseY, highestNonOverlappingY))
         closeLbl.position = CGPoint(x: safeSceneFrame.midX, y: closeY)
-        closeLbl.zPosition = 115
+        closeLbl.zPosition = 305
         closeLbl.name = "helpOverlay"
         addChild(closeLbl)
     }
@@ -714,6 +720,31 @@ extension GameScene {
     func dismissHelpOverlay() {
         children.filter { $0.name == "helpOverlay" }.forEach { $0.removeFromParent() }
         helpOverlay = nil
+        resumesGameAfterHelpDismissal = false
+
+        if gameState == .paused, pauseOverlay != nil {
+            setPauseMenuNodesHidden(false)
+        }
+    }
+
+    func showPauseControlsOverlay() {
+        setPauseMenuNodesHidden(true)
+        showHelpOverlay(transparentBackground: true)
+    }
+
+    private func setPauseMenuNodesHidden(_ isHidden: Bool) {
+        let pauseMenuNodeNames: Set<String> = [
+            "pauseOverlay",
+            "resumeButton",
+            "controlsButton",
+            "musicToggleButton",
+            "soundToggleButton",
+            "quitButton"
+        ]
+        children.filter { node in
+            guard let name = node.name else { return false }
+            return pauseMenuNodeNames.contains(name)
+        }.forEach { $0.isHidden = isHidden }
     }
 
     func setupHUD() {
@@ -743,6 +774,32 @@ extension GameScene {
         scoreLabel.zPosition = 200
         scoreLabel.name = "scoreLabel"
         addChild(scoreLabel)
+
+        // Active power-up status — centered directly beneath the score.
+        let powerUpIndicator = SKShapeNode(
+            rectOf: CGSize(width: 142, height: 28),
+            cornerRadius: 9
+        )
+        powerUpIndicator.fillColor = SKColor(red: 0.05, green: 0.65, blue: 0.2, alpha: 0.9)
+        powerUpIndicator.strokeColor = SKColor(red: 0.3, green: 1.0, blue: 0.45, alpha: 1.0)
+        powerUpIndicator.lineWidth = 1.5
+        powerUpIndicator.position = CGPoint(x: hud.score.x, y: hud.score.y - 40)
+        powerUpIndicator.zPosition = 199
+        powerUpIndicator.name = "hudElement"
+        powerUpIndicator.isHidden = true
+
+        let powerUpLabel = SKLabelNode(fontNamed: "AlienInvader")
+        powerUpLabel.text = "2X POINTS 1:00"
+        powerUpLabel.fontSize = 13
+        powerUpLabel.yScale = fontYScale
+        powerUpLabel.fontColor = .white
+        powerUpLabel.verticalAlignmentMode = .center
+        powerUpLabel.horizontalAlignmentMode = .center
+        powerUpLabel.zPosition = 1
+        powerUpIndicator.addChild(powerUpLabel)
+        addChild(powerUpIndicator)
+        doublePointsIndicator = powerUpIndicator
+        doublePointsIndicatorLabel = powerUpLabel
 
         // Pause button — inside the converted safe area on every device.
         pauseButton = SKShapeNode(rectOf: GameUILayout.hudControlSize, cornerRadius: 8)
@@ -777,6 +834,7 @@ extension GameScene {
         children.filter { $0.name == "tree" }.forEach { $0.isPaused = true }
         children.filter { $0.name == "skyscraper" }.forEach { $0.isPaused = true }
         children.filter { $0.name == "transitionOverlay" }.forEach { $0.isPaused = true }
+        children.filter { $0.name == "powerUp" }.forEach { $0.isPaused = true }
         saucer?.isPaused = true
         pauseMusic()
 
@@ -820,12 +878,29 @@ extension GameScene {
         resumeBtn.addChild(resumeLbl)
         addChild(resumeBtn)
 
+        // Controls button
+        let controlsBtn = SKShapeNode(rectOf: GameUILayout.pauseMenuButtonSize, cornerRadius: 14)
+        controlsBtn.fillColor = SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
+        controlsBtn.strokeColor = .white
+        controlsBtn.lineWidth = 2
+        controlsBtn.position = CGPoint(x: safeFrame.midX, y: pauseMenu.buttonYs[1])
+        controlsBtn.zPosition = 95
+        controlsBtn.name = "controlsButton"
+        let controlsLbl = SKLabelNode(fontNamed: "AlienInvader")
+        controlsLbl.text = "Controls"
+        controlsLbl.fontSize = 24
+        controlsLbl.yScale = fontYScale
+        controlsLbl.fontColor = .white
+        controlsLbl.verticalAlignmentMode = .center
+        controlsBtn.addChild(controlsLbl)
+        addChild(controlsBtn)
+
         // Music toggle button
         let musicBtn = SKShapeNode(rectOf: GameUILayout.pauseMenuButtonSize, cornerRadius: 14)
         musicBtn.fillColor = isMusicOff ? SKColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1.0) : SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
         musicBtn.strokeColor = .white
         musicBtn.lineWidth = 2
-        musicBtn.position = CGPoint(x: safeFrame.midX, y: pauseMenu.buttonYs[1])
+        musicBtn.position = CGPoint(x: safeFrame.midX, y: pauseMenu.buttonYs[2])
         musicBtn.zPosition = 95
         musicBtn.name = "musicToggleButton"
         let musicLbl = SKLabelNode(fontNamed: "AlienInvader")
@@ -843,7 +918,7 @@ extension GameScene {
         soundBtn.fillColor = isSoundOff ? SKColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1.0) : SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
         soundBtn.strokeColor = .white
         soundBtn.lineWidth = 2
-        soundBtn.position = CGPoint(x: safeFrame.midX, y: pauseMenu.buttonYs[2])
+        soundBtn.position = CGPoint(x: safeFrame.midX, y: pauseMenu.buttonYs[3])
         soundBtn.zPosition = 95
         soundBtn.name = "soundToggleButton"
         let soundLbl = SKLabelNode(fontNamed: "AlienInvader")
@@ -861,7 +936,7 @@ extension GameScene {
         quitBtn.fillColor = SKColor(red: 0.8, green: 0.2, blue: 0.2, alpha: 1.0)
         quitBtn.strokeColor = .white
         quitBtn.lineWidth = 2
-        quitBtn.position = CGPoint(x: safeFrame.midX, y: pauseMenu.buttonYs[3])
+        quitBtn.position = CGPoint(x: safeFrame.midX, y: pauseMenu.buttonYs[4])
         quitBtn.zPosition = 95
         quitBtn.name = "quitButton"
         let quitLbl = SKLabelNode(fontNamed: "AlienInvader")
@@ -905,17 +980,22 @@ extension GameScene {
         // Sound off kills everything; sound on restores music if music isn't separately off
         if isSoundOff {
             gameMusicPlayer?.pause()
+            pauseShieldHum()
             stopCrossfadeTimer()
-        } else if !isMusicOff {
-            gameMusicPlayer?.play()
-            scheduleCrossfadeLoop(for: gameMusicPlayer)
+        } else {
+            if !isMusicOff {
+                gameMusicPlayer?.play()
+                scheduleCrossfadeLoop(for: gameMusicPlayer)
+            }
+            playShieldHumIfActive()
         }
     }
 
     func resumeGame() {
         children.filter {
             $0.name == "pauseOverlay" || $0.name == "resumeButton" || $0.name == "quitButton" ||
-            $0.name == "musicToggleButton" || $0.name == "soundToggleButton"
+            $0.name == "controlsButton" || $0.name == "musicToggleButton" ||
+            $0.name == "soundToggleButton"
         }.forEach { $0.removeFromParent() }
         pauseOverlay = nil
 
@@ -926,6 +1006,7 @@ extension GameScene {
         children.filter { $0.name == "tree" }.forEach { $0.isPaused = false }
         children.filter { $0.name == "skyscraper" }.forEach { $0.isPaused = false }
         children.filter { $0.name == "transitionOverlay" }.forEach { $0.isPaused = false }
+        children.filter { $0.name == "powerUp" }.forEach { $0.isPaused = false }
         saucer?.isPaused = false
 
         // Reset lastUpdateTime so dt doesn't jump
@@ -943,7 +1024,8 @@ extension GameScene {
         popup.fontSize = points >= 200 ? 22 : 18
         popup.yScale = fontYScale
         popup.fontColor = points >= 200 ? SKColor(red: 1.0, green: 0.85, blue: 0.0, alpha: 1.0) : SKColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0)
-        popup.position = CGPoint(x: scoreLabel.position.x, y: scoreLabel.position.y - 25)
+        let popupOffset: CGFloat = doublePointsIndicator?.isHidden == false ? 62 : 25
+        popup.position = CGPoint(x: scoreLabel.position.x, y: scoreLabel.position.y - popupOffset)
         popup.zPosition = 200
         popup.alpha = 1.0
 

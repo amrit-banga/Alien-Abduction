@@ -37,9 +37,11 @@ class GameViewController: UIViewController {
 
             skView.presentScene(scene)
             skView.ignoresSiblingOrder = true
+            skView.shouldCullNonVisibleNodes = true
+            skView.preferredFramesPerSecond = 60
 
-            skView.showsFPS = true
-            skView.showsNodeCount = true
+            skView.showsFPS = false
+            skView.showsNodeCount = false
         }
 
         // Compatibility-mode safe areas can settle after the scene is first

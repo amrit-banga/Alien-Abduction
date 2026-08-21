@@ -18,6 +18,7 @@ final class CloudDataManager {
     static let highScoreKey = "AlienAbductionHighScore"
     static let musicOffKey = "AlienAbductionMusicOff"
     static let soundOffKey = "AlienAbductionSoundOff"
+    static let hasShownFirstPlayControlsKey = "AlienAbductionHasShownFirstPlayControls"
 
     static let allCreatureKeys: [String] = [
         "catches_whale", "catches_elk", "catches_cow", "catches_cat",
@@ -99,6 +100,13 @@ final class CloudDataManager {
                 cloud.set(local.bool(forKey: key), forKey: key)
             }
         }
+
+        // The first-play controls flag is monotonic: once it is true on any
+        // device, it should stay true everywhere.
+        let hasShownFirstPlayControls = local.bool(forKey: CloudDataManager.hasShownFirstPlayControlsKey)
+            || cloud.bool(forKey: CloudDataManager.hasShownFirstPlayControlsKey)
+        local.set(hasShownFirstPlayControls, forKey: CloudDataManager.hasShownFirstPlayControlsKey)
+        cloud.set(hasShownFirstPlayControls, forKey: CloudDataManager.hasShownFirstPlayControlsKey)
     }
 
     @objc private func iCloudDidChange(_ notification: Notification) {
@@ -138,6 +146,11 @@ final class CloudDataManager {
                 submitScoreToGameCenter(newValue)
             }
         }
+    }
+
+    var hasShownFirstPlayControls: Bool {
+        get { bool(forKey: CloudDataManager.hasShownFirstPlayControlsKey) }
+        set { set(newValue, forKey: CloudDataManager.hasShownFirstPlayControlsKey) }
     }
 
     // MARK: - Creature Catches (convenience)

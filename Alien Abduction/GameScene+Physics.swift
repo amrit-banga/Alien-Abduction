@@ -63,6 +63,7 @@ extension GameScene {
         movingDown = false
         tractorBeamActive = false
         removeTractorBeam()
+        stopShieldHum()
 
         stopGameMusic()
         saveHighScore()
@@ -101,6 +102,8 @@ extension GameScene {
         ]))
 
         // Hide saucer after explosion
+        saucer?.removeAction(forKey: "shieldInvincibility")
+        saucer?.alpha = 1
         saucer?.run(SKAction.sequence([
             SKAction.wait(forDuration: 0.1),
             SKAction.fadeOut(withDuration: 0.2)
@@ -111,11 +114,14 @@ extension GameScene {
         children.filter { $0.name == "oilRig" }.forEach { $0.removeAllActions() }
         children.filter { $0.name == "skyscraper" }.forEach { $0.removeAllActions() }
         children.filter { $0.name == "tree" }.forEach { $0.removeAllActions() }
+        children.filter { $0.name == "powerUp" }.forEach { $0.removeAllActions() }
 
         // Hide HUD
         children.filter { $0.name == "hudElement" }.forEach { $0.removeFromParent() }
         scoreLabel?.removeFromParent()
         scoreLabel = nil
+        doublePointsIndicator = nil
+        doublePointsIndicatorLabel = nil
         pauseButton?.removeFromParent()
         pauseButton = nil
 
@@ -301,7 +307,8 @@ extension GameScene {
         animal.removeAllActions()
 
         // Award points based on animal type
-        let points = (animal.userData?["points"] as? Int) ?? 10
+        let basePoints = (animal.userData?["points"] as? Int) ?? 10
+        let points = Int(Double(basePoints) * currentPointsMultiplier)
         score += Double(points)
 
         // Check score achievements immediately after points awarded

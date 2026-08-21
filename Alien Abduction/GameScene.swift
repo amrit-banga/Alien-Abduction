@@ -16,6 +16,7 @@ struct PhysicsCategory {
     static let saucer:  UInt32 = 0b1
     static let obstacle: UInt32 = 0b10
     static let ground:  UInt32 = 0b100
+    static let powerUp: UInt32 = 0b1000
 }
 
 // MARK: - Game States
@@ -43,6 +44,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     var gameState: GameState = .menu
     var gamePhase: GamePhase = .ocean
     var lastUpdateTime: TimeInterval = 0
+    let maximumFrameDelta: TimeInterval = 1.0 / 30.0
 
     // Nodes
     var saucer: SKSpriteNode!
@@ -52,6 +54,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     var statsOverlay: SKSpriteNode?
     var helpButton: SKShapeNode!
     var helpOverlay: SKSpriteNode?
+    var resumesGameAfterHelpDismissal = false
     var titleLabel: SKLabelNode!
     var gameOverOverlay: SKSpriteNode!
     var groundNode: SKShapeNode!
@@ -64,6 +67,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
 
     // Background layers (static)
     var moonNode: SKSpriteNode!
+    var shootingStarTimer: TimeInterval = 0
+    let shootingStarInterval: TimeInterval = 7
 
     // Track whether real assets are available
     var hasSkyAsset: Bool { UIImage(named: "sky") != nil }
@@ -73,6 +78,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
 
     // Plane asset names
     let planeAssetNames = ["plane1", "plane2", "plane3"]
+    var planeTextureCache: [String: SKTexture] = [:]
 
     // Scrolling speeds
     let baseGroundSpeed: CGFloat = 120.0
@@ -99,6 +105,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     // Continuous ground terrain
     var groundWorldOffset: CGFloat = 0
     let terrainResolution: CGFloat = 4
+    let terrainGeometryRebuildDistance: CGFloat = 12
+    var terrainGeometryBaseOffset: CGFloat?
+    var terrainGeometryPhase: GamePhase?
+    var terrainGeometryWasTransitioning = false
+    var terrainGeometryTransitionFromPhase: GamePhase?
     var elapsedTime: TimeInterval = 0
 
     // Phase timing
@@ -113,14 +124,34 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     var skyscraperSpawnTimer: TimeInterval = 0
     var skyscraperSpawnInterval: TimeInterval = 1.5
 
+    // Power-ups
+    var powerUpSpawnTimer: TimeInterval = 0
+    let powerUpSpawnInterval: TimeInterval = 31
+    var activePowerUp: SKNode?
+    var lastSpawnedPowerUpKind: PowerUpKind?
+    let powerUpPlaneClearance: CGFloat = 90
+    let doublePointsDuration: TimeInterval = 30
+    var doublePointsTimeRemaining: TimeInterval = 0
+    var doublePointsIndicator: SKShapeNode?
+    var doublePointsIndicatorLabel: SKLabelNode?
+    var hasShield = false
+    var shieldVisual: SKShapeNode?
+    let shieldInvincibilityDuration: TimeInterval = 2
+    var shieldInvincibilityTimeRemaining: TimeInterval = 0
+
     // Environment transition
     var transitionWorldX: CGFloat = 0
     let transitionSandWidth: CGFloat = 150.0
+    let grasslandCityFlattenDistance: CGFloat = 420
     var isTransitioning = false
     var transitionFromPhase: GamePhase = .ocean
     var transitionOverlay1: SKSpriteNode?
     var transitionOverlay2: SKSpriteNode?
     var grasslandOverlayNode: SKShapeNode?
+    var grassBladeDetailNode: SKShapeNode?
+    var waterDetailNode: SKShapeNode?
+    var waterHighlightDetailNode: SKShapeNode?
+    var cityDetailNode: SKShapeNode?
 
     // Plane spawning
     var planeSpawnTimer: TimeInterval = 0
@@ -151,6 +182,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     // Audio
     var menuMusicPlayer: AVAudioPlayer?
     var gameMusicPlayer: AVAudioPlayer?
+    var shieldHumPlayer: AVAudioPlayer?
+    var shieldPickupPlayer: AVAudioPlayer?
+    var shieldBreakPlayer: AVAudioPlayer?
+    var doublePointsPickupPlayer: AVAudioPlayer?
     var crossfadeTimer: Timer?
     let musicFadeDuration: TimeInterval = 3.0
     let crossfadeLeadTime: TimeInterval = 3.0
@@ -180,6 +215,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         physicsWorld.gravity = .zero
         physicsWorld.contactDelegate = self
 
+        preloadPlaneTextures()
+
         NotificationCenter.default.addObserver(self, selector: #selector(appDidEnterBackground), name: .appDidEnterBackground, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(appWillEnterForeground), name: .appWillEnterForeground, object: nil)
 
@@ -187,13 +224,16 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     }
 
     @objc func appDidEnterBackground() {
+        lastUpdateTime = 0
         menuMusicPlayer?.pause()
         gameMusicPlayer?.pause()
+        pauseShieldHum()
         crossfadeTimer?.invalidate()
         crossfadeTimer = nil
     }
 
     @objc func appWillEnterForeground() {
+        playShieldHumIfActive()
         guard !isMusicOff && !isSoundOff else { return }
         if gameState == .menu || gameState == .gameOver {
             menuMusicPlayer?.play()
@@ -206,7 +246,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
 
     // MARK: - Start Gameplay
 
-    func startGame() {
+    func startGame(animatedMenuTransition: Bool = true) {
         gameState = .playing
         gamePhase = .ocean
         speedMultiplier = 1.0
@@ -219,6 +259,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         oilRigSpawnTimer = 0
         treeSpawnTimer = 0
         skyscraperSpawnTimer = 0
+        shootingStarTimer = 0
         initialSequenceComplete = false
         phaseStartTime = 0
         currentPhaseDuration = 0
@@ -228,18 +269,26 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         isTransitioning = false
         saucerIdleTimer = 0
         lastSaucerY = 0
+        resetPowerUpsForNewRun()
 
         let fadeOut = SKAction.sequence([
             SKAction.fadeOut(withDuration: 0.2),
             SKAction.removeFromParent()
         ])
-        startButton?.run(fadeOut)
+        if animatedMenuTransition {
+            startButton?.run(fadeOut)
+            statsButton?.run(fadeOut)
+            helpButton?.run(fadeOut)
+            children.filter { $0.name == "titleLabel" }.forEach { $0.run(fadeOut) }
+        } else {
+            startButton?.removeFromParent()
+            statsButton?.removeFromParent()
+            helpButton?.removeFromParent()
+            children.filter { $0.name == "titleLabel" }.forEach { $0.removeFromParent() }
+        }
         startButton = nil
-        statsButton?.run(fadeOut)
         statsButton = nil
-        helpButton?.run(fadeOut)
         helpButton = nil
-        children.filter { $0.name == "titleLabel" }.forEach { $0.run(fadeOut) }
         titleLabel = nil
 
         setupHUD()
@@ -249,7 +298,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     // MARK: - Score
 
     func updateScore(dt: TimeInterval) {
-        score += dt * 0.5
+        score += dt * 0.5 * currentPointsMultiplier
         scoreLabel?.text = "\(Int(score))"
 
         let currentScore = Int(score)
@@ -285,6 +334,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         oceanSprite2 = nil
         transitionOverlay1 = nil
         transitionOverlay2 = nil
+        shootingStarTimer = 0
+        resetPowerUpsForNewRun()
 
         setupBackground()
         setupGround()
@@ -364,7 +415,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     func beginTransition(from oldPhase: GamePhase, to newPhase: GamePhase) {
         isTransitioning = true
         transitionFromPhase = oldPhase
-        transitionWorldX = groundWorldOffset + size.width
+        let flatteningExtension = oldPhase == .grassland && newPhase == .city
+            ? grasslandCityFlattenDistance
+            : 0
+        transitionWorldX = groundWorldOffset + size.width + flatteningExtension
 
         transitionOverlay1?.removeFromParent()
         transitionOverlay2?.removeFromParent()
@@ -377,7 +431,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
             case .grassland:
                 oldColor = SKColor(red: 0.18, green: 0.40, blue: 0.12, alpha: 1.0)
             case .city:
-                oldColor = SKColor(red: 0.20, green: 0.20, blue: 0.22, alpha: 1.0)
+                oldColor = SKColor(red: 0.19, green: 0.19, blue: 0.21, alpha: 1.0)
             case .ocean:
                 oldColor = .clear
             }
@@ -436,7 +490,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         body.affectedByGravity = false
         body.allowsRotation = false
         body.categoryBitMask = PhysicsCategory.saucer
-        body.contactTestBitMask = PhysicsCategory.obstacle | PhysicsCategory.ground
+        body.contactTestBitMask = PhysicsCategory.obstacle | PhysicsCategory.ground | PhysicsCategory.powerUp
         body.collisionBitMask = PhysicsCategory.none
         saucer.physicsBody = body
 
@@ -483,6 +537,16 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
 
         let categories = contact.bodyA.categoryBitMask | contact.bodyB.categoryBitMask
 
+        if categories & PhysicsCategory.saucer != 0 && categories & PhysicsCategory.powerUp != 0 {
+            let powerUpNode = contact.bodyA.categoryBitMask == PhysicsCategory.powerUp
+                ? contact.bodyA.node
+                : contact.bodyB.node
+            if let powerUpNode {
+                collectPowerUp(powerUpNode)
+            }
+            return
+        }
+
         if categories & PhysicsCategory.saucer != 0 &&
            (categories & PhysicsCategory.obstacle != 0 || categories & PhysicsCategory.ground != 0) {
             let contactPoint = contact.contactPoint
@@ -491,6 +555,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
                 obstacleNode = contact.bodyB.node
             } else {
                 obstacleNode = contact.bodyA.node
+            }
+
+            if shieldInvincibilityTimeRemaining > 0 {
+                return
+            }
+            if shieldCanAbsorbCollision(categoryBitMask: categories) {
+                breakShield(at: contactPoint)
+                return
             }
             triggerGameOver(at: contactPoint, obstacle: obstacleNode)
         }
@@ -501,6 +573,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = touches.first else { return }
         let location = touch.location(in: self)
+
+        if helpOverlay != nil {
+            let shouldResumeGame = resumesGameAfterHelpDismissal
+            dismissHelpOverlay()
+            if shouldResumeGame {
+                dataManager.hasShownFirstPlayControls = true
+                lastUpdateTime = 0
+                gameState = .playing
+                resumeMusic()
+            }
+            return
+        }
 
         switch gameState {
         case .menu:
@@ -514,13 +598,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
                 }
                 return
             }
-            if helpOverlay != nil {
-                dismissHelpOverlay()
-                return
-            }
             let tappedNodes = nodes(at: location)
             if tappedNodes.contains(where: { $0.name == "startButton" || $0.parent?.name == "startButton" }) {
-                startGame()
+                if dataManager.hasShownFirstPlayControls {
+                    startGame()
+                } else {
+                    startGame(animatedMenuTransition: false)
+                    gameState = .paused
+                    showHelpOverlay(
+                        resumesGameOnDismissal: true,
+                        transparentBackground: true
+                    )
+                }
             } else if tappedNodes.contains(where: { $0.name == "statsButton" || $0.parent?.name == "statsButton" }) {
                 showStatsOverlay()
             } else if tappedNodes.contains(where: { $0.name == "helpButton" || $0.parent?.name == "helpButton" }) {
@@ -539,6 +628,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
             let tappedNodes = nodes(at: location)
             if tappedNodes.contains(where: { $0.name == "resumeButton" || $0.parent?.name == "resumeButton" }) {
                 resumeGame()
+            } else if tappedNodes.contains(where: { $0.name == "controlsButton" || $0.parent?.name == "controlsButton" }) {
+                showPauseControlsOverlay()
             } else if tappedNodes.contains(where: { $0.name == "musicToggleButton" || $0.parent?.name == "musicToggleButton" }) {
                 toggleMusic()
             } else if tappedNodes.contains(where: { $0.name == "soundToggleButton" || $0.parent?.name == "soundToggleButton" }) {
@@ -622,6 +713,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
         oceanSprite2 = nil
         transitionOverlay1 = nil
         transitionOverlay2 = nil
+        shootingStarTimer = 0
+        resetPowerUpsForNewRun()
 
         setupBackground()
         setupGround()
@@ -652,16 +745,22 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
 
     override func update(_ currentTime: TimeInterval) {
         if lastUpdateTime == 0 { lastUpdateTime = currentTime }
-        let dt = currentTime - lastUpdateTime
+        let rawDelta = max(0, currentTime - lastUpdateTime)
+        let dt = min(rawDelta, maximumFrameDelta)
         lastUpdateTime = currentTime
 
         guard gameState != .gameOver && gameState != .paused else { return }
 
         scrollGround(dt: dt)
 
+        if gameState == .menu || gameState == .playing {
+            updateShootingStars(dt: dt)
+        }
+
         if gameState == .playing {
             elapsedTime += dt
             updatePhase()
+            updatePowerUps(dt: dt)
             updateScore(dt: dt)
             updateSaucerPosition(dt: dt)
             updateTractorBeam()

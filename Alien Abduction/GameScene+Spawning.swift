@@ -7,25 +7,49 @@ import SpriteKit
 
 extension GameScene {
 
+    func preloadPlaneTextures() {
+        let textures = planeAssetNames.compactMap { name -> SKTexture? in
+            guard UIImage(named: name) != nil else { return nil }
+            let texture = SKTexture(imageNamed: name)
+            texture.filteringMode = .linear
+            planeTextureCache[name] = texture
+            return texture
+        }
+
+        guard !textures.isEmpty else { return }
+        SKTexture.preload(textures) {}
+    }
+
+    func makePlaneSprite(named name: String, width: CGFloat, height: CGFloat) -> SKSpriteNode {
+        if let texture = planeTextureCache[name] {
+            return SKSpriteNode(texture: texture, size: CGSize(width: width, height: height))
+        }
+
+        guard UIImage(named: name) != nil else {
+            return createPlaceholderPlane(width: width, height: height)
+        }
+
+        let texture = SKTexture(imageNamed: name)
+        texture.filteringMode = .linear
+        planeTextureCache[name] = texture
+        return SKSpriteNode(texture: texture, size: CGSize(width: width, height: height))
+    }
+
     func spawnPlane() {
         let planeWidth: CGFloat = 80
         let planeHeight: CGFloat = 35
 
         let chosenName = planeAssetNames.randomElement()!
-        let plane: SKSpriteNode
-        if UIImage(named: chosenName) != nil {
-            plane = SKSpriteNode(imageNamed: chosenName)
-            plane.size = CGSize(width: planeWidth, height: planeHeight)
-        } else {
-            plane = createPlaceholderPlane(width: planeWidth, height: planeHeight)
-        }
+        let plane = makePlaneSprite(named: chosenName, width: planeWidth, height: planeHeight)
         plane.name = "plane"
         plane.zPosition = 40
 
         // Planes always fly above the max possible terrain height
         let minY = maxPossibleTerrainHeight
         let maxY = size.height - 60
-        let spawnY = CGFloat.random(in: minY...max(minY + 1, maxY))
+        guard let spawnY = safePlaneSpawnY(minY: minY, maxY: max(minY + 1, maxY)) else {
+            return
+        }
         plane.position = CGPoint(x: size.width + planeWidth, y: spawnY)
 
         let body = SKPhysicsBody(rectangleOf: CGSize(width: planeWidth, height: planeHeight))
@@ -40,6 +64,7 @@ extension GameScene {
         let distance = size.width + planeWidth * 2
         let duration = TimeInterval(distance / speed)
         let moveLeft = SKAction.moveBy(x: -distance, y: 0, duration: duration)
+        moveLeft.timingMode = .linear
         plane.run(SKAction.sequence([moveLeft, SKAction.removeFromParent()]))
 
         addChild(plane)
@@ -81,17 +106,13 @@ extension GameScene {
     }
 
     func spawnTargetedPlane(atY y: CGFloat) {
+        guard isPlaneLaneAvailable(atY: y) else { return }
+
         let planeWidth: CGFloat = 80
         let planeHeight: CGFloat = 35
 
         let chosenName = planeAssetNames.randomElement()!
-        let plane: SKSpriteNode
-        if UIImage(named: chosenName) != nil {
-            plane = SKSpriteNode(imageNamed: chosenName)
-            plane.size = CGSize(width: planeWidth, height: planeHeight)
-        } else {
-            plane = createPlaceholderPlane(width: planeWidth, height: planeHeight)
-        }
+        let plane = makePlaneSprite(named: chosenName, width: planeWidth, height: planeHeight)
         plane.name = "plane"
         plane.zPosition = 40
         plane.position = CGPoint(x: size.width + planeWidth, y: y)
@@ -108,6 +129,7 @@ extension GameScene {
         let distance = size.width + planeWidth * 2
         let duration = TimeInterval(distance / speed)
         let moveLeft = SKAction.moveBy(x: -distance, y: 0, duration: duration)
+        moveLeft.timingMode = .linear
         plane.run(SKAction.sequence([moveLeft, SKAction.removeFromParent()]))
 
         addChild(plane)
@@ -291,7 +313,26 @@ extension GameScene {
         let spawnScreenX = size.width + treeWidth
         let worldX = groundWorldOffset + spawnScreenX
         let groundY = terrainHeight(at: worldX)
-        tree.position = CGPoint(x: spawnScreenX, y: groundY + treeHeight / 2 - 8)
+        tree.position = CGPoint(x: spawnScreenX, y: groundY + treeHeight / 2 - 2)
+
+        // A lightweight compound body closely follows the canopy and trunk.
+        // Avoiding a texture-derived body prevents a hitch each time a tree is
+        // spawned in the grassland biome.
+        let canopyBody = SKPhysicsBody(
+            circleOfRadius: treeWidth * 0.46,
+            center: CGPoint(x: 0, y: treeHeight * 0.23)
+        )
+        let trunkBody = SKPhysicsBody(
+            rectangleOf: CGSize(width: treeWidth * 0.25, height: treeHeight * 0.58),
+            center: CGPoint(x: 0, y: -treeHeight * 0.21)
+        )
+        let body = SKPhysicsBody(bodies: [canopyBody, trunkBody])
+        body.isDynamic = true
+        body.affectedByGravity = false
+        body.categoryBitMask = PhysicsCategory.obstacle
+        body.contactTestBitMask = PhysicsCategory.saucer
+        body.collisionBitMask = PhysicsCategory.none
+        tree.physicsBody = body
 
         addChild(tree)
 

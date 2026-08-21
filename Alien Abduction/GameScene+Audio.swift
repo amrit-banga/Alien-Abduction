@@ -26,6 +26,31 @@ extension GameScene {
             gameMusicPlayer?.volume = 1.0
             gameMusicPlayer?.prepareToPlay()
         }
+
+        if let url = Bundle.main.url(forResource: "shieldHum", withExtension: "wav") {
+            shieldHumPlayer = try? AVAudioPlayer(contentsOf: url)
+            shieldHumPlayer?.numberOfLoops = -1
+            shieldHumPlayer?.volume = 0.36
+            shieldHumPlayer?.prepareToPlay()
+        }
+
+        if let url = Bundle.main.url(forResource: "shieldPickup", withExtension: "wav") {
+            shieldPickupPlayer = try? AVAudioPlayer(contentsOf: url)
+            shieldPickupPlayer?.volume = 0.9
+            shieldPickupPlayer?.prepareToPlay()
+        }
+
+        if let url = Bundle.main.url(forResource: "shieldBreak", withExtension: "wav") {
+            shieldBreakPlayer = try? AVAudioPlayer(contentsOf: url)
+            shieldBreakPlayer?.volume = 1.0
+            shieldBreakPlayer?.prepareToPlay()
+        }
+
+        if let url = Bundle.main.url(forResource: "doublePointsPickup", withExtension: "wav") {
+            doublePointsPickupPlayer = try? AVAudioPlayer(contentsOf: url)
+            doublePointsPickupPlayer?.volume = 0.78
+            doublePointsPickupPlayer?.prepareToPlay()
+        }
     }
 
     // MARK: - Music Playback
@@ -146,13 +171,16 @@ extension GameScene {
 
     func pauseMusic() {
         gameMusicPlayer?.pause()
+        pauseShieldHum()
         stopCrossfadeTimer()
     }
 
     func resumeMusic() {
-        guard !isMusicOff && !isSoundOff else { return }
-        gameMusicPlayer?.play()
-        scheduleCrossfadeLoop(for: gameMusicPlayer)
+        if !isMusicOff && !isSoundOff {
+            gameMusicPlayer?.play()
+            scheduleCrossfadeLoop(for: gameMusicPlayer)
+        }
+        playShieldHumIfActive()
     }
 
     // MARK: - Sound Effects
@@ -162,6 +190,38 @@ extension GameScene {
         if let action = tractorBeamSoundAction {
             run(action)
         }
+    }
+
+    func playShieldBreakSound() {
+        guard !isSoundOff else { return }
+        shieldBreakPlayer?.currentTime = 0
+        shieldBreakPlayer?.play()
+    }
+
+    func playShieldPickupSound() {
+        guard !isSoundOff else { return }
+        shieldPickupPlayer?.currentTime = 0
+        shieldPickupPlayer?.play()
+    }
+
+    func playDoublePointsPickupSound() {
+        guard !isSoundOff else { return }
+        doublePointsPickupPlayer?.currentTime = 0
+        doublePointsPickupPlayer?.play()
+    }
+
+    func playShieldHumIfActive() {
+        guard hasShield, gameState == .playing, !isSoundOff else { return }
+        shieldHumPlayer?.play()
+    }
+
+    func pauseShieldHum() {
+        shieldHumPlayer?.pause()
+    }
+
+    func stopShieldHum() {
+        shieldHumPlayer?.stop()
+        shieldHumPlayer?.currentTime = 0
     }
 
     func playCreatureSound(for creatureType: String) {
