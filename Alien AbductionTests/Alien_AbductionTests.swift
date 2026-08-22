@@ -12,6 +12,34 @@ import SpriteKit
 
 final class Alien_AbductionTests: XCTestCase {
 
+    func testCloudStatsMergeDoesNotInventZeroForMissingValues() {
+        XCTAssertNil(CloudDataManager.mergedMonotonicValue(localValue: nil, cloudValue: nil))
+    }
+
+    func testCloudStatsMergeKeepsHighestAvailableValue() {
+        XCTAssertEqual(
+            CloudDataManager.mergedMonotonicValue(localValue: nil, cloudValue: 41),
+            41
+        )
+        XCTAssertEqual(
+            CloudDataManager.mergedMonotonicValue(localValue: 23, cloudValue: nil),
+            23
+        )
+        XCTAssertEqual(
+            CloudDataManager.mergedMonotonicValue(localValue: 23, cloudValue: 41),
+            41
+        )
+        XCTAssertEqual(
+            CloudDataManager.mergedMonotonicValue(localValue: 57, cloudValue: 41),
+            57
+        )
+    }
+
+    func testAllCreatureStatsUseTheCanonicalHikerKey() {
+        XCTAssertTrue(CloudDataManager.allCreatureKeys.contains("catches_hikerHuman"))
+        XCTAssertFalse(CloudDataManager.allCreatureKeys.contains("catches_hiker"))
+    }
+
     func testHUDStaysInsideCompatibilitySafeArea() {
         // A narrow safe frame models the rounded/cropped compatibility window
         // presented on an 11-inch iPad.

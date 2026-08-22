@@ -22,9 +22,10 @@ final class CloudDataManager {
 
     static let allCreatureKeys: [String] = [
         "catches_whale", "catches_elk", "catches_cow", "catches_cat",
-        "catches_hiker", "catches_workerHuman",
+        "catches_hikerHuman", "catches_workerHuman",
         "catches_bigfoot", "catches_werewolf", "catches_kraken"
     ]
+    static let legacyHikerCatchKey = "catches_hiker"
 
     // Game Center leaderboard ID — set this in App Store Connect
     static let leaderboardID = "com.alienabduction.highscore"
@@ -57,6 +58,8 @@ final class CloudDataManager {
 
     private let cloud = NSUbiquitousKeyValueStore.default
     private let local = UserDefaults.standard
+    private var isInitialCloudMergePending = true
+    private var pendingInitialCloudMerge: DispatchWorkItem?
 
     // MARK: - Init
 
@@ -70,47 +73,165 @@ final class CloudDataManager {
         )
         // Kick off initial sync
         cloud.synchronize()
-        mergeFromCloud()
+        // Import anything already cached, but do not upload missing values until
+        // iCloud confirms its initial download. This prevents a fresh install
+        // from replacing remote stats with local default zeroes.
+        mergeFromCloud(uploadLocalValuesMissingFromCloud: false)
+        scheduleMergeAfterInitialCloudDownload()
     }
 
-    // MARK: - Merge (take the max for scores/counts, latest for booleans)
+    // MARK: - Merge
 
-    private func mergeFromCloud() {
-        // High score — keep the higher value
-        let cloudScore = Int(cloud.longLong(forKey: CloudDataManager.highScoreKey))
-        let localScore = local.integer(forKey: CloudDataManager.highScoreKey)
-        let best = max(cloudScore, localScore)
-        local.set(best, forKey: CloudDataManager.highScoreKey)
-        cloud.set(Int64(best), forKey: CloudDataManager.highScoreKey)
+    /// Stats only move upward, so the higher value always wins. Returning nil
+    /// when neither store has a value is important: zero must not be invented
+    /// and uploaded during a fresh install's initial iCloud sync.
+    static func mergedMonotonicValue(localValue: Int?, cloudValue: Int?) -> Int? {
+        switch (localValue, cloudValue) {
+        case let (localValue?, cloudValue?):
+            return max(localValue, cloudValue)
+        case let (localValue?, nil):
+            return localValue
+        case let (nil, cloudValue?):
+            return cloudValue
+        case (nil, nil):
+            return nil
+        }
+    }
+
+    private func localIntegerIfPresent(forKey key: String) -> Int? {
+        guard local.object(forKey: key) != nil else { return nil }
+        return local.integer(forKey: key)
+    }
+
+    private func cloudIntegerIfPresent(forKey key: String) -> Int? {
+        guard cloud.object(forKey: key) != nil else { return nil }
+        return Int(cloud.longLong(forKey: key))
+    }
+
+    @discardableResult
+    private func mergeMonotonicValue(
+        forKey key: String,
+        uploadLocalValueMissingFromCloud: Bool,
+        additionalLocalValues: [Int] = [],
+        additionalCloudValues: [Int] = []
+    ) -> Bool {
+        let localValue = ([localIntegerIfPresent(forKey: key)] + additionalLocalValues)
+            .compactMap { $0 }
+            .max()
+        let cloudValue = ([cloudIntegerIfPresent(forKey: key)] + additionalCloudValues)
+            .compactMap { $0 }
+            .max()
+
+        guard let merged = CloudDataManager.mergedMonotonicValue(
+            localValue: localValue,
+            cloudValue: cloudValue
+        ) else {
+            return false
+        }
+
+        if localIntegerIfPresent(forKey: key) != merged {
+            local.set(merged, forKey: key)
+        }
+
+        if let currentCloudValue = cloudIntegerIfPresent(forKey: key) {
+            guard currentCloudValue != merged else { return false }
+            cloud.set(Int64(merged), forKey: key)
+            return true
+        }
+
+        guard uploadLocalValueMissingFromCloud, localValue != nil else {
+            return false
+        }
+        cloud.set(Int64(merged), forKey: key)
+        return true
+    }
+
+    private func mergeFromCloud(uploadLocalValuesMissingFromCloud: Bool) {
+        var changedCloud = mergeMonotonicValue(
+            forKey: CloudDataManager.highScoreKey,
+            uploadLocalValueMissingFromCloud: uploadLocalValuesMissingFromCloud
+        )
 
         // Creature catches — keep the higher count
         for key in CloudDataManager.allCreatureKeys {
-            let cloudVal = Int(cloud.longLong(forKey: key))
-            let localVal = local.integer(forKey: key)
-            let merged = max(cloudVal, localVal)
-            local.set(merged, forKey: key)
-            cloud.set(Int64(merged), forKey: key)
+            let isHikerKey = key == "catches_hikerHuman"
+            let legacyLocalValue = isHikerKey
+                ? localIntegerIfPresent(forKey: CloudDataManager.legacyHikerCatchKey)
+                : nil
+            let legacyCloudValue = isHikerKey
+                ? cloudIntegerIfPresent(forKey: CloudDataManager.legacyHikerCatchKey)
+                : nil
+            changedCloud = mergeMonotonicValue(
+                forKey: key,
+                uploadLocalValueMissingFromCloud: uploadLocalValuesMissingFromCloud,
+                additionalLocalValues: [legacyLocalValue].compactMap { $0 },
+                additionalCloudValues: [legacyCloudValue].compactMap { $0 }
+            ) || changedCloud
         }
 
         // Audio settings — cloud wins if it has a value
         for key in [CloudDataManager.musicOffKey, CloudDataManager.soundOffKey] {
             if cloud.object(forKey: key) != nil {
                 local.set(cloud.bool(forKey: key), forKey: key)
-            } else {
+            } else if uploadLocalValuesMissingFromCloud, local.object(forKey: key) != nil {
                 cloud.set(local.bool(forKey: key), forKey: key)
+                changedCloud = true
             }
         }
 
         // The first-play controls flag is monotonic: once it is true on any
         // device, it should stay true everywhere.
-        let hasShownFirstPlayControls = local.bool(forKey: CloudDataManager.hasShownFirstPlayControlsKey)
-            || cloud.bool(forKey: CloudDataManager.hasShownFirstPlayControlsKey)
-        local.set(hasShownFirstPlayControls, forKey: CloudDataManager.hasShownFirstPlayControlsKey)
-        cloud.set(hasShownFirstPlayControls, forKey: CloudDataManager.hasShownFirstPlayControlsKey)
+        let controlsKey = CloudDataManager.hasShownFirstPlayControlsKey
+        let localHasControlsValue = local.object(forKey: controlsKey) != nil
+        let cloudHasControlsValue = cloud.object(forKey: controlsKey) != nil
+        if localHasControlsValue || cloudHasControlsValue {
+            let hasShownFirstPlayControls = (localHasControlsValue && local.bool(forKey: controlsKey))
+                || (cloudHasControlsValue && cloud.bool(forKey: controlsKey))
+            local.set(hasShownFirstPlayControls, forKey: controlsKey)
+            if cloudHasControlsValue {
+                if cloud.bool(forKey: controlsKey) != hasShownFirstPlayControls {
+                    cloud.set(hasShownFirstPlayControls, forKey: controlsKey)
+                    changedCloud = true
+                }
+            } else if uploadLocalValuesMissingFromCloud {
+                cloud.set(hasShownFirstPlayControls, forKey: controlsKey)
+                changedCloud = true
+            }
+        }
+
+        if changedCloud {
+            cloud.synchronize()
+        }
     }
 
     @objc private func iCloudDidChange(_ notification: Notification) {
-        mergeFromCloud()
+        let reason = (notification.userInfo?[NSUbiquitousKeyValueStoreChangeReasonKey] as? NSNumber)?
+            .intValue
+
+        if reason == NSUbiquitousKeyValueStoreInitialSyncChange
+            || reason == NSUbiquitousKeyValueStoreAccountChange {
+            // Apple recommends delaying writes while the initial download is
+            // in progress. Import the values received so far and restart the
+            // short quiet period before uploading the merged local snapshot.
+            isInitialCloudMergePending = true
+            mergeFromCloud(uploadLocalValuesMissingFromCloud: false)
+            scheduleMergeAfterInitialCloudDownload()
+        } else if reason == NSUbiquitousKeyValueStoreQuotaViolationChange {
+            mergeFromCloud(uploadLocalValuesMissingFromCloud: false)
+        } else {
+            mergeFromCloud(uploadLocalValuesMissingFromCloud: !isInitialCloudMergePending)
+        }
+    }
+
+    private func scheduleMergeAfterInitialCloudDownload() {
+        pendingInitialCloudMerge?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.isInitialCloudMergePending = false
+            self.mergeFromCloud(uploadLocalValuesMissingFromCloud: true)
+        }
+        pendingInitialCloudMerge = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: workItem)
     }
 
     // MARK: - Public Accessors
@@ -124,13 +245,21 @@ final class CloudDataManager {
     }
 
     func set(_ value: Int, forKey key: String) {
-        local.set(value, forKey: key)
-        cloud.set(Int64(value), forKey: key)
+        let currentLocalValue = localIntegerIfPresent(forKey: key)
+        let currentCloudValue = cloudIntegerIfPresent(forKey: key)
+        let merged = CloudDataManager.mergedMonotonicValue(
+            localValue: max(value, currentLocalValue ?? value),
+            cloudValue: currentCloudValue
+        ) ?? value
+        local.set(merged, forKey: key)
+        guard !isInitialCloudMergePending else { return }
+        cloud.set(Int64(merged), forKey: key)
         cloud.synchronize()
     }
 
     func set(_ value: Bool, forKey key: String) {
         local.set(value, forKey: key)
+        guard !isInitialCloudMergePending else { return }
         cloud.set(value, forKey: key)
         cloud.synchronize()
     }
@@ -176,11 +305,7 @@ final class CloudDataManager {
                     vc.present(gcAuthVC, animated: true)
                 } else if GKLocalPlayer.local.isAuthenticated {
                     print("Game Center authenticated: \(GKLocalPlayer.local.displayName)")
-                    // Submit any existing high score
-                    let best = self.highScore
-                    if best > 0 {
-                        self.submitScoreToGameCenter(best)
-                    }
+                    self.restoreHighScoreFromGameCenter()
                 } else if let error = error {
                     print("Game Center auth failed: \(error.localizedDescription)")
                 }
@@ -203,6 +328,46 @@ final class CloudDataManager {
             if let error = error {
                 print("Failed to submit score: \(error.localizedDescription)")
             }
+        }
+    }
+
+    private func restoreHighScoreFromGameCenter() {
+        GKLeaderboard.loadLeaderboards(IDs: [CloudDataManager.leaderboardID]) { leaderboards, error in
+            if let error = error {
+                print("Failed to load leaderboard: \(error.localizedDescription)")
+                self.submitExistingHighScoreToGameCenter()
+                return
+            }
+
+            guard let leaderboard = leaderboards?.first else {
+                self.submitExistingHighScoreToGameCenter()
+                return
+            }
+
+            leaderboard.loadEntries(
+                for: [GKLocalPlayer.local],
+                timeScope: .allTime
+            ) { localPlayerEntry, _, error in
+                if let error = error {
+                    print("Failed to restore Game Center score: \(error.localizedDescription)")
+                }
+
+                let gameCenterScore = localPlayerEntry.map { Int($0.score) } ?? 0
+                let restoredScore = max(self.highScore, gameCenterScore)
+                if restoredScore > self.highScore {
+                    self.set(restoredScore, forKey: CloudDataManager.highScoreKey)
+                }
+                if restoredScore > gameCenterScore {
+                    self.submitScoreToGameCenter(restoredScore)
+                }
+            }
+        }
+    }
+
+    private func submitExistingHighScoreToGameCenter() {
+        let best = highScore
+        if best > 0 {
+            submitScoreToGameCenter(best)
         }
     }
 

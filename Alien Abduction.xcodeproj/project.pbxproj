@@ -169,6 +169,14 @@
 				TargetAttributes = {
 					9C36BADC2F6D20B2007431CF = {
 						CreatedOnToolsVersion = 26.1;
+						SystemCapabilities = {
+							com.apple.GameCenter = {
+								enabled = 1;
+							};
+							com.apple.iCloud = {
+								enabled = 1;
+							};
+						};
 					};
 					9C36BAF52F6D20B4007431CF = {
 						CreatedOnToolsVersion = 26.1;
