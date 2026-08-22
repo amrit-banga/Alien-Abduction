@@ -400,7 +400,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Alien Abduction/Alien Abduction.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 222Z9QQN6Q;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Alien-Abduction-Info.plist";
@@ -415,7 +415,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.amritbanga.alienabduction;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -441,7 +441,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Alien Abduction/Alien Abduction.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 222Z9QQN6Q;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Alien-Abduction-Info.plist";
@@ -456,7 +456,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.amritbanga.alienabduction;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
