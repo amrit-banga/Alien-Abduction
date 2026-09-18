@@ -68,7 +68,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     // Background layers (static)
     var moonNode: SKSpriteNode!
     var shootingStarTimer: TimeInterval = 0
-    let shootingStarInterval: TimeInterval = 7
+    let shootingStarInterval: TimeInterval = 4
 
     // Track whether real assets are available
     var hasSkyAsset: Bool { UIImage(named: "sky") != nil }
@@ -161,6 +161,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     // Animal spawning
     var animalSpawnTimer: TimeInterval = 0
     var animalSpawnInterval: TimeInterval = 4.0
+    let legendaryCreatureSpawnChanceDenominator = 50
 
     // Oil rig spawning (ocean only)
     var oilRigSpawnTimer: TimeInterval = 0
@@ -248,6 +249,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     // MARK: - Start Gameplay
 
     func startGame(animatedMenuTransition: Bool = true) {
+        setGameplayFrozen(false)
         gameState = .playing
         gamePhase = .ocean
         speedMultiplier = 1.0
@@ -314,6 +316,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     func quitToMenu() {
         saveHighScore()
         stopGameMusic()
+        setGameplayFrozen(false)
         removeAllChildren()
         moonNode = nil
         groundWorldOffset = 0
@@ -580,6 +583,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
             dismissHelpOverlay()
             if shouldResumeGame {
                 dataManager.hasShownFirstPlayControls = true
+                setGameplayFrozen(false)
                 lastUpdateTime = 0
                 gameState = .playing
                 resumeMusic()
@@ -606,6 +610,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
                 } else {
                     startGame(animatedMenuTransition: false)
                     gameState = .paused
+                    setGameplayFrozen(true)
                     showHelpOverlay(
                         resumesGameOnDismissal: true,
                         transparentBackground: true
@@ -693,6 +698,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate, GKGameCenterControllerDelega
     // MARK: - Restart
 
     func restartGame() {
+        setGameplayFrozen(false)
         removeAllChildren()
         moonNode = nil
         groundWorldOffset = 0

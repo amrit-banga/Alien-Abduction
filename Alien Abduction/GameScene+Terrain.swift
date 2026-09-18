@@ -183,16 +183,18 @@ extension GameScene {
         star.zPosition = -9.4
         star.alpha = 0
         star.position = CGPoint(
-            x: CGFloat.random(in: size.width * 0.35...size.width * 0.95),
-            y: CGFloat.random(in: size.height * 0.68...size.height * 0.92)
+            x: CGFloat.random(in: size.width * 0.08...size.width * 0.92),
+            y: CGFloat.random(in: size.height * 0.52...size.height * 0.92)
         )
 
-        let trailLength = CGFloat.random(in: 42...58)
+        let trailLength = CGFloat.random(in: 30...100)
+        let descentRatio = CGFloat.random(in: 0.28...0.58)
         let trailPath = CGMutablePath()
         trailPath.move(to: .zero)
-        trailPath.addLine(to: CGPoint(x: trailLength, y: trailLength * 0.42))
+        trailPath.addLine(to: CGPoint(x: trailLength, y: trailLength * descentRatio))
 
         let trail = SKShapeNode(path: trailPath)
+        trail.name = "shootingStarTrail"
         trail.strokeColor = SKColor(white: 0.92, alpha: 0.75)
         trail.lineWidth = 1
         trail.glowWidth = 1.2
@@ -208,11 +210,11 @@ extension GameScene {
         // This node intentionally has no physics body or touch behavior.
         addChild(star)
 
-        let travelDistance = CGFloat.random(in: 70...95)
-        let duration = TimeInterval.random(in: 0.38...0.52)
+        let travelDistance = trailLength * CGFloat.random(in: 1.35...1.8)
+        let duration = TimeInterval.random(in: 0.34...0.62)
         let travel = SKAction.moveBy(
             x: -travelDistance,
-            y: -travelDistance * 0.42,
+            y: -travelDistance * descentRatio,
             duration: duration
         )
         travel.timingMode = .linear

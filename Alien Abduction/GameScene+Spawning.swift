@@ -153,13 +153,20 @@ extension GameScene {
         }
     }
 
-    func spawnAnimal() {
+    func spawnAnimal(legendaryRoll requestedLegendaryRoll: Int? = nil) {
         let animalName: String
         var isLegendary = false
-        let legendaryRoll = Int.random(in: 1...50)
+        let legendaryRoll = requestedLegendaryRoll ?? Int.random(
+            in: 1...legendaryCreatureSpawnChanceDenominator
+        )
 
         if gamePhase == .ocean {
-            animalName = "whale"
+            if legendaryRoll == 1 {
+                animalName = "kraken"
+                isLegendary = true
+            } else {
+                animalName = "whale"
+            }
         } else if gamePhase == .grassland {
             if legendaryRoll == 1 {
                 animalName = "bigfoot"
@@ -184,7 +191,9 @@ extension GameScene {
         }
 
         let animalSize: CGSize
-        if animalName == "whale" {
+        if animalName == "kraken" {
+            animalSize = CGSize(width: 60, height: 50)
+        } else if animalName == "whale" {
             animalSize = CGSize(width: 40, height: 30)
         } else if animalName == "bigfoot" {
             animalSize = CGSize(width: 50, height: 55)
@@ -210,7 +219,7 @@ extension GameScene {
         let worldX = groundWorldOffset + spawnScreenX
         let groundY = terrainHeight(at: worldX)
         let yOffset: CGFloat
-        if animalName == "whale" {
+        if animalName == "whale" || animalName == "kraken" {
             yOffset = animalSize.height * 0.10
         } else if animalName == "cow" {
             yOffset = animalSize.height / 2 - 8
@@ -253,8 +262,14 @@ extension GameScene {
         let groundY = terrainHeight(at: worldX)
         oilRig.position = CGPoint(x: spawnScreenX, y: groundY + rigHeight / 2 - 8)
 
-        // Physics body so saucer crashes into it
-        let body = SKPhysicsBody(rectangleOf: CGSize(width: rigWidth * 0.8, height: rigHeight))
+        // Follow the visible rig silhouette instead of treating its transparent
+        // canvas as a solid rectangle.
+        let body: SKPhysicsBody
+        if let texture = oilRig.texture {
+            body = SKPhysicsBody(texture: texture, size: oilRig.size)
+        } else {
+            body = SKPhysicsBody(rectangleOf: CGSize(width: rigWidth * 0.72, height: rigHeight * 0.96))
+        }
         body.isDynamic = true
         body.affectedByGravity = false
         body.categoryBitMask = PhysicsCategory.obstacle
@@ -271,21 +286,6 @@ extension GameScene {
         let moveLeft = SKAction.moveBy(x: -distance, y: 0, duration: duration)
         oilRig.run(SKAction.sequence([moveLeft, SKAction.removeFromParent()]))
 
-        // 1/50 chance to spawn a kraken underneath the oil rig
-        if Int.random(in: 1...50) == 1 {
-            let krakenSize = CGSize(width: 60, height: 50)
-            let kraken = SKSpriteNode(imageNamed: "kraken")
-            kraken.size = krakenSize
-            kraken.name = "animal"
-            kraken.zPosition = 7
-            kraken.userData = NSMutableDictionary()
-            kraken.userData?["points"] = 200
-            kraken.userData?["legendary"] = true
-            kraken.userData?["creatureType"] = "kraken"
-            kraken.position = CGPoint(x: spawnScreenX, y: groundY + krakenSize.height * 0.10)
-            addChild(kraken)
-            kraken.run(SKAction.sequence([moveLeft.copy() as! SKAction, SKAction.removeFromParent()]))
-        }
     }
 
     func updateTreeSpawning(dt: TimeInterval) {
@@ -393,7 +393,7 @@ extension GameScene {
         building.run(SKAction.sequence([moveLeft, SKAction.removeFromParent()]))
 
         // 1/50 chance to spawn a werewolf on top of the skyscraper
-        if Int.random(in: 1...50) == 1 {
+        if Int.random(in: 1...legendaryCreatureSpawnChanceDenominator) == 1 {
             let wwSize = CGSize(width: 40, height: 50)
             let werewolf = SKSpriteNode(imageNamed: "werewolf")
             werewolf.size = wwSize

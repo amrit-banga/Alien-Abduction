@@ -58,18 +58,93 @@ final class Alien_AbductionTests: XCTestCase {
         XCTAssertLessThanOrEqual(pauseFrame.maxY, safeFrame.maxY)
     }
 
-    func testShootingStarsSpawnEverySevenSecondsBehindGameplay() throws {
+    func testShootingStarsSpawnEveryFourSecondsAcrossTopHalf() throws {
         let scene = GameScene(size: CGSize(width: 390, height: 844))
 
-        scene.updateShootingStars(dt: 6.9)
+        scene.updateShootingStars(dt: 3.9)
         XCTAssertNil(scene.children.first { $0.name == "shootingStar" })
 
         scene.updateShootingStars(dt: 0.2)
         let star = try XCTUnwrap(scene.children.first { $0.name == "shootingStar" })
-        XCTAssertEqual(scene.shootingStarInterval, 7)
+        XCTAssertEqual(scene.shootingStarInterval, 4)
         XCTAssertNil(star.physicsBody)
         XCTAssertGreaterThan(star.zPosition, -10)
         XCTAssertLessThan(star.zPosition, -8)
+        XCTAssertGreaterThanOrEqual(star.position.x, scene.size.width * 0.08)
+        XCTAssertLessThanOrEqual(star.position.x, scene.size.width * 0.92)
+        XCTAssertGreaterThanOrEqual(star.position.y, scene.size.height * 0.52)
+        XCTAssertLessThanOrEqual(star.position.y, scene.size.height * 0.92)
+
+        let trail = try XCTUnwrap(star.childNode(withName: "shootingStarTrail") as? SKShapeNode)
+        let trailPath = try XCTUnwrap(trail.path)
+        XCTAssertGreaterThanOrEqual(trailPath.boundingBox.width, 30)
+        XCTAssertLessThanOrEqual(trailPath.boundingBox.width, 100)
+    }
+
+    func testOceanLegendarySpawnIsAnIndependentKraken() throws {
+        let scene = GameScene(size: CGSize(width: 390, height: 844))
+        scene.gamePhase = .ocean
+
+        scene.spawnAnimal(legendaryRoll: 1)
+
+        let kraken = try XCTUnwrap(scene.children.first { $0.name == "animal" })
+        XCTAssertEqual(kraken.userData?["creatureType"] as? String, "kraken")
+        XCTAssertEqual(kraken.userData?["points"] as? Int, 200)
+        XCTAssertEqual(kraken.userData?["legendary"] as? Bool, true)
+        XCTAssertEqual(scene.legendaryCreatureSpawnChanceDenominator, 50)
+    }
+
+    func testOilRigDoesNotControlKrakenSpawning() throws {
+        let scene = GameScene(size: CGSize(width: 390, height: 844))
+        scene.gamePhase = .ocean
+
+        scene.spawnOilRig()
+
+        let oilRig = try XCTUnwrap(scene.children.first { $0.name == "oilRig" } as? SKSpriteNode)
+        let body = try XCTUnwrap(oilRig.physicsBody)
+        XCTAssertNil(scene.children.first { $0.name == "animal" })
+        XCTAssertGreaterThan(body.area, 0)
+        XCTAssertLessThan(body.area, oilRig.size.width * oilRig.size.height)
+    }
+
+    func testPauseFreezesEveryExistingSceneNodeAndPhysics() {
+        let scene = GameScene(size: CGSize(width: 390, height: 844))
+        scene.gameState = .playing
+
+        let backgroundEffect = SKNode()
+        backgroundEffect.name = "futureBackgroundEffect"
+        backgroundEffect.run(SKAction.repeatForever(SKAction.moveBy(x: 10, y: 0, duration: 1)))
+        scene.addChild(backgroundEffect)
+
+        let obstacle = SKNode()
+        obstacle.name = "futureObstacleType"
+        obstacle.run(SKAction.repeatForever(SKAction.moveBy(x: -10, y: 0, duration: 1)))
+        scene.addChild(obstacle)
+
+        scene.showPauseMenu()
+
+        if case .paused = scene.gameState {
+            // Expected state.
+        } else {
+            XCTFail("Pause menu did not enter the paused state")
+        }
+        XCTAssertEqual(scene.speed, 0)
+        XCTAssertEqual(scene.physicsWorld.speed, 0)
+        XCTAssertTrue(backgroundEffect.isPaused)
+        XCTAssertTrue(obstacle.isPaused)
+        XCTAssertFalse(scene.pauseOverlay?.isPaused ?? true)
+
+        scene.resumeGame()
+
+        if case .playing = scene.gameState {
+            // Expected state.
+        } else {
+            XCTFail("Resume did not restore the playing state")
+        }
+        XCTAssertEqual(scene.speed, 1)
+        XCTAssertEqual(scene.physicsWorld.speed, 1)
+        XCTAssertFalse(backgroundEffect.isPaused)
+        XCTAssertFalse(obstacle.isPaused)
     }
 
     func testPauseMenuButtonsNeverOverlapOnShortViewport() {
@@ -88,24 +163,24 @@ final class Alien_AbductionTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(bottomEdge, safeFrame.minY)
     }
 
-    func testControlsOverlayBackgroundMatchesEntryPoint() {
+    func testControlsOverlayBackgroundMatchesEntryPoint() throws {
         let menuScene = GameScene(size: CGSize(width: 390, height: 844))
         menuScene.showHelpOverlay()
-        XCTAssertEqual(menuScene.helpOverlay?.alpha, CGFloat(1))
+        XCTAssertEqual(try XCTUnwrap(menuScene.helpOverlay).alpha, 1, accuracy: 0.001)
 
         let firstPlayScene = GameScene(size: CGSize(width: 390, height: 844))
         firstPlayScene.showHelpOverlay(
             resumesGameOnDismissal: true,
             transparentBackground: true
         )
-        XCTAssertEqual(firstPlayScene.helpOverlay?.alpha, CGFloat(0.82))
+        XCTAssertEqual(try XCTUnwrap(firstPlayScene.helpOverlay).alpha, 0.82, accuracy: 0.001)
 
         let pauseScene = GameScene(size: CGSize(width: 390, height: 844))
         pauseScene.showHelpOverlay(transparentBackground: true)
-        XCTAssertEqual(pauseScene.helpOverlay?.alpha, CGFloat(0.82))
+        XCTAssertEqual(try XCTUnwrap(pauseScene.helpOverlay).alpha, 0.82, accuracy: 0.001)
     }
 
-    func testPauseControlsTemporarilyHidePauseMenu() {
+    func testPauseControlsTemporarilyHidePauseMenu() throws {
         let scene = GameScene(size: CGSize(width: 390, height: 844))
         scene.gameState = .paused
 
@@ -121,7 +196,7 @@ final class Alien_AbductionTests: XCTestCase {
         scene.showPauseControlsOverlay()
         XCTAssertTrue(pauseBackground.isHidden)
         XCTAssertTrue(controlsButton.isHidden)
-        XCTAssertEqual(scene.helpOverlay?.alpha, CGFloat(0.82))
+        XCTAssertEqual(try XCTUnwrap(scene.helpOverlay).alpha, 0.82, accuracy: 0.001)
 
         scene.dismissHelpOverlay()
         XCTAssertFalse(pauseBackground.isHidden)
@@ -332,7 +407,7 @@ final class Alien_AbductionTests: XCTestCase {
         let shieldPath = try XCTUnwrap(scene.shieldVisual?.path)
         XCTAssertEqual(shieldPath.boundingBox.width, 70, accuracy: 0.01)
         XCTAssertEqual(shieldPath.boundingBox.height, 49, accuracy: 0.01)
-        XCTAssertEqual(scene.shieldVisual?.lineWidth, CGFloat(0.3))
+        XCTAssertEqual(try XCTUnwrap(scene.shieldVisual).lineWidth, 0.3, accuracy: 0.001)
     }
 
     func testShieldPowerUpUsesGrayIcon() throws {

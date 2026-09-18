@@ -34,7 +34,7 @@ Environments cycle randomly after the initial sequence (ocean → grassland → 
 | Worker | City | 30 |
 | **Bigfoot** 🟡 | Grassland | 200 |
 | **Werewolf** 🟡 | City (on rooftops) | 200 |
-| **Kraken** 🟡 | Ocean (under oil rigs) | 200 |
+| **Kraken** 🟡 | Ocean (open water) | 200 |
 
 🟡 Legendary creatures are extremely rare (1/50 spawn chance).
 

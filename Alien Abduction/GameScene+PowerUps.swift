@@ -271,8 +271,8 @@ extension GameScene {
         shieldVisual?.removeFromParent()
         guard let saucer else { return }
 
-        // This is a visual child only. It deliberately has no physics body, so
-        // the saucer's original collision shape remains unchanged.
+        // This is a visual child only. Shield interception therefore uses the
+        // saucer's original physics body and exactly matches its hitbox.
         let shield = SKShapeNode(ellipseOf: CGSize(width: 70, height: 49))
         shield.name = "shieldVisual"
         shield.fillColor = SKColor(red: 0.2, green: 0.75, blue: 1.0, alpha: 0.12)

@@ -825,17 +825,12 @@ extension GameScene {
         movingUp = false
         movingDown = false
 
-        // Freeze all moving objects
+        // Pause every node that already belongs to the game, including
+        // decorative background actions and any future obstacle types. The
+        // pause interface is added afterward so it remains interactive.
         tractorBeamActive = false
         removeTractorBeam()
-        children.filter { $0.name == "plane" }.forEach { $0.isPaused = true }
-        children.filter { $0.name == "animal" }.forEach { $0.isPaused = true }
-        children.filter { $0.name == "oilRig" }.forEach { $0.isPaused = true }
-        children.filter { $0.name == "tree" }.forEach { $0.isPaused = true }
-        children.filter { $0.name == "skyscraper" }.forEach { $0.isPaused = true }
-        children.filter { $0.name == "transitionOverlay" }.forEach { $0.isPaused = true }
-        children.filter { $0.name == "powerUp" }.forEach { $0.isPaused = true }
-        saucer?.isPaused = true
+        setGameplayFrozen(true)
         pauseMusic()
 
         let overlay = SKSpriteNode(color: .black, size: size)
@@ -999,21 +994,19 @@ extension GameScene {
         }.forEach { $0.removeFromParent() }
         pauseOverlay = nil
 
-        // Unfreeze all moving objects
-        children.filter { $0.name == "plane" }.forEach { $0.isPaused = false }
-        children.filter { $0.name == "animal" }.forEach { $0.isPaused = false }
-        children.filter { $0.name == "oilRig" }.forEach { $0.isPaused = false }
-        children.filter { $0.name == "tree" }.forEach { $0.isPaused = false }
-        children.filter { $0.name == "skyscraper" }.forEach { $0.isPaused = false }
-        children.filter { $0.name == "transitionOverlay" }.forEach { $0.isPaused = false }
-        children.filter { $0.name == "powerUp" }.forEach { $0.isPaused = false }
-        saucer?.isPaused = false
+        setGameplayFrozen(false)
 
         // Reset lastUpdateTime so dt doesn't jump
         lastUpdateTime = 0
 
         gameState = .playing
         resumeMusic()
+    }
+
+    func setGameplayFrozen(_ frozen: Bool) {
+        speed = frozen ? 0 : 1
+        physicsWorld.speed = frozen ? 0 : 1
+        children.forEach { $0.isPaused = frozen }
     }
 
     func showPointsPopup(points: Int) {
